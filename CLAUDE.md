@@ -26,3 +26,8 @@ Ambas skills están symlinkeadas en `.claude/skills/` desde `E:\Users\1187574\Do
 - Sin test framework configurado — no asumir que existe `npm test` funcional.
 - Sin CI (`.github/workflows` no existe).
 - Sin Prettier — formato solo por ESLint (`eslint-config-next`, flat config en `eslint.config.mjs`).
+
+##Skills
+
+Usa siempre /frontend-design para diseñar interfaces de usuarios.
+
