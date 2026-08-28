@@ -25,9 +25,8 @@ Ambas skills están symlinkeadas en `.claude/skills/` desde `E:\Users\1187574\Do
 
 - Sin test framework configurado — no asumir que existe `npm test` funcional.
 - Sin CI (`.github/workflows` no existe).
-- Sin Prettier — formato solo por ESLint (`eslint-config-next`, flat config en `eslint.config.mjs`).
+- Prettier configurado (`.prettierrc`, `.prettierignore`), integrado con ESLint vía `eslint-config-prettier` (flat config en `eslint.config.mjs`). Cada Write/Edit dispara un hook `PostToolUse` (`.claude/settings.json`) que corre `prettier --write` y, en archivos JS/TS, `eslint --fix` automáticamente sobre el archivo tocado.
 
 ##Skills
 
 Usa siempre /frontend-design para diseñar interfaces de usuarios.
-

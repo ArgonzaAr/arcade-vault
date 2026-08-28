@@ -45,4 +45,6 @@ next-env.d.ts
 .claude
 
 .env.template
-
+.prettierrc
+.prettierignore
+esling.config.msj
