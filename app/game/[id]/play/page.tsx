@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, notFound } from "next/navigation";
 import Link from "next/link";
 import { GAMES } from "@/app/lib/data";
+import { insertScore } from "@/app/lib/supabase/queries.client";
 import AsteroidsCanvas, {
   type AsteroidsCanvasHandle,
 } from "@/app/game/asteroides/AsteroidsCanvas";
@@ -93,7 +94,12 @@ export default function GamePlayerPage() {
     if (isAsteroids) engineRef.current?.restart();
   };
 
-  const saveScore = () => {
+  const saveScore = async () => {
+    if (isAsteroids) {
+      await insertScore("asteroides", name, score);
+      setSaved(true);
+      return;
+    }
     try {
       const all = JSON.parse(localStorage.getItem("av_scores") || "[]");
       all.push({ game: game.id, score, name, at: Date.now() });
