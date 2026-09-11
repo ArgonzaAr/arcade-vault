@@ -5,10 +5,11 @@ import { useParams, useRouter, notFound } from "next/navigation";
 import Link from "next/link";
 import { GAMES } from "@/app/lib/data";
 import { insertScore } from "@/app/lib/supabase/queries.client";
-import AsteroidsCanvas, {
-  type AsteroidsCanvasHandle,
-} from "@/app/game/asteroides/AsteroidsCanvas";
-import type { AsteroidsStats } from "@/app/game/asteroides/engine";
+import {
+  gameRegistry,
+  type GameEngineHandle,
+  type GameStats,
+} from "@/app/game/registry";
 
 interface StoredUser {
   name: string;
@@ -20,8 +21,9 @@ export default function GamePlayerPage() {
   const game = GAMES.find((g) => g.id === id);
   if (!game) notFound();
 
-  const isAsteroids = game.id === "asteroides";
-  const engineRef = useRef<AsteroidsCanvasHandle>(null);
+  const entry = gameRegistry[game.id];
+  const hasEngine = Boolean(entry);
+  const engineRef = useRef<GameEngineHandle>(null);
 
   const [user, setUser] = useState<StoredUser | null>(null);
   const [score, setScore] = useState(0);
@@ -42,20 +44,20 @@ export default function GamePlayerPage() {
   }, []);
 
   useEffect(() => {
-    if (isAsteroids || over || paused) return;
+    if (hasEngine || over || paused) return;
     const t = setInterval(
       () => setScore((s) => s + Math.floor(10 + Math.random() * 90)),
       220
     );
     return () => clearInterval(t);
-  }, [isAsteroids, over, paused]);
+  }, [hasEngine, over, paused]);
 
   useEffect(() => {
-    if (isAsteroids) return;
+    if (hasEngine) return;
     if (score > 0 && score % 2500 < 100) setLevel((l) => l + 1);
-  }, [isAsteroids, score]);
+  }, [hasEngine, score]);
 
-  const handleStats = useCallback((stats: AsteroidsStats) => {
+  const handleStats = useCallback((stats: GameStats) => {
     setScore(stats.score);
     setLives(stats.lives);
     setLevel(stats.level);
@@ -68,7 +70,7 @@ export default function GamePlayerPage() {
   const togglePause = () => {
     setPaused((p) => {
       const next = !p;
-      if (isAsteroids) {
+      if (hasEngine) {
         if (next) engineRef.current?.pause();
         else engineRef.current?.resume();
       }
@@ -77,7 +79,7 @@ export default function GamePlayerPage() {
   };
 
   const endGame = () => {
-    if (isAsteroids) {
+    if (hasEngine) {
       engineRef.current?.forceGameOver();
     } else {
       setOver(true);
@@ -91,12 +93,12 @@ export default function GamePlayerPage() {
     setPaused(false);
     setOver(false);
     setSaved(false);
-    if (isAsteroids) engineRef.current?.restart();
+    if (hasEngine) engineRef.current?.restart();
   };
 
   const saveScore = async () => {
-    if (isAsteroids) {
-      await insertScore("asteroides", name, score);
+    if (entry?.hasRealLeaderboard) {
+      await insertScore(game.id, name, score);
       setSaved(true);
       return;
     }
@@ -123,8 +125,12 @@ export default function GamePlayerPage() {
             <div className="v">{score.toLocaleString("es-ES")}</div>
           </div>
           <div className="hud-stat lives">
-            <div className="l">Vidas</div>
-            <div className="v">{"♥ ".repeat(lives).trim() || "—"}</div>
+            <div className="l">{entry?.secondaryStatLabel ?? "Vidas"}</div>
+            <div className="v">
+              {entry
+                ? entry.formatSecondaryStat(lives)
+                : "♥ ".repeat(lives).trim() || "—"}
+            </div>
           </div>
           <div className="hud-stat level">
             <div className="l">Nivel</div>
@@ -148,9 +154,14 @@ export default function GamePlayerPage() {
       </div>
 
       <div className="crt">
-        <div className="crt-screen">
-          {isAsteroids ? (
-            <AsteroidsCanvas
+        <div
+          className={
+            "crt-screen" +
+            (entry?.screenClassName ? ` ${entry.screenClassName}` : "")
+          }
+        >
+          {entry ? (
+            <entry.Canvas
               ref={engineRef}
               onStats={handleStats}
               onGameOver={handleGameOver}

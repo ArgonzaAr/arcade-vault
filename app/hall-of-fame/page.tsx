@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GAMES, seededScores, type ScoreRow } from "@/app/lib/data";
 import { getTopScores } from "@/app/lib/supabase/queries.client";
+import { gameRegistry } from "@/app/game/registry";
 
 interface StoredUser {
   name: string;
@@ -13,7 +14,7 @@ export default function HallOfFamePage() {
   const router = useRouter();
   const [tab, setTab] = useState(GAMES[0].id);
   const [user, setUser] = useState<StoredUser | null>(null);
-  const [asteroidesRows, setAsteroidesRows] = useState<ScoreRow[]>([]);
+  const [realRows, setRealRows] = useState<ScoreRow[]>([]);
 
   useEffect(() => {
     try {
@@ -23,10 +24,10 @@ export default function HallOfFamePage() {
   }, []);
 
   useEffect(() => {
-    if (tab !== "asteroides") return;
+    if (!gameRegistry[tab]?.hasRealLeaderboard) return;
     let cancelled = false;
-    getTopScores("asteroides", 12).then((real) => {
-      if (!cancelled) setAsteroidesRows(real);
+    getTopScores(tab, 12).then((real) => {
+      if (!cancelled) setRealRows(real);
     });
     return () => {
       cancelled = true;
@@ -34,7 +35,7 @@ export default function HallOfFamePage() {
   }, [tab]);
 
   const seeded = useMemo(() => seededScores(tab.length * 23 + 7, 12), [tab]);
-  const rows = tab === "asteroides" ? asteroidesRows : seeded;
+  const rows = gameRegistry[tab]?.hasRealLeaderboard ? realRows : seeded;
   const game = GAMES.find((g) => g.id === tab)!;
   const youRank = user ? Math.floor(8 + (tab.length % 4)) : null;
   const youScore = user ? rows[5]?.score - 2400 : null;

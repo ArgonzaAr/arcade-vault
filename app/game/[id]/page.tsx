@@ -3,6 +3,7 @@ import Link from "next/link";
 import { seededScores } from "@/app/lib/data";
 import { getGameBySlug } from "@/app/lib/supabase/queries";
 import { getTopScores } from "@/app/lib/supabase/queries.client";
+import { gameRegistry } from "@/app/game/registry";
 
 export default async function GameDetailPage({
   params,
@@ -11,10 +12,9 @@ export default async function GameDetailPage({
   const game = await getGameBySlug(id);
   if (!game) notFound();
 
-  const scores =
-    id === "asteroides"
-      ? await getTopScores("asteroides", 10)
-      : seededScores(id.length * 17 + 3, 10);
+  const scores = gameRegistry[id]?.hasRealLeaderboard
+    ? await getTopScores(id, 10)
+    : seededScores(id.length * 17 + 3, 10);
 
   return (
     <div className="av-detail fade-in">
