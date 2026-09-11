@@ -5,7 +5,7 @@ export interface Game {
   title: string;
   short: string;
   long: string;
-  cat: "ARCADE" | "PUZZLE" | "SHOOTER" | "VERSUS";
+  cat: "PUZZLE" | "SHOOTER";
   cover: string; // clase CSS cover-*
   color: "cyan" | "magenta" | "yellow" | "green";
   best: number;
