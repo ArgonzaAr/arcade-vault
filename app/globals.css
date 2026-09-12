@@ -711,6 +711,39 @@ a {
   text-shadow: 0 0 8px var(--yellow);
 }
 
+.cover-arkanoid {
+  background: radial-gradient(circle at 50% 30%, #3a0028, #0a0008);
+}
+.cover-arkanoid::after {
+  content: "";
+  position: absolute;
+  inset: 15% 15% 45% 15%;
+  background:
+    linear-gradient(#ff006e, #ff006e) 0 0/20% 33%,
+    linear-gradient(#f5ff00, #f5ff00) 20% 0/20% 33%,
+    linear-gradient(#00f5ff, #00f5ff) 40% 0/20% 33%,
+    linear-gradient(#ff77ff, #ff77ff) 60% 0/20% 33%,
+    linear-gradient(#00ff88, #00ff88) 80% 0/20% 33%,
+    linear-gradient(#00f5ff, #00f5ff) 0 33%/20% 33%,
+    linear-gradient(#ff77ff, #ff77ff) 20% 33%/20% 33%,
+    linear-gradient(#f5ff00, #f5ff00) 40% 33%/20% 33%,
+    linear-gradient(#ff006e, #ff006e) 60% 33%/20% 33%,
+    linear-gradient(#00ff88, #00ff88) 80% 33%/20% 33%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 8px rgba(255, 0, 110, 0.4));
+  image-rendering: pixelated;
+}
+.cover-arkanoid::before {
+  content: "";
+  position: absolute;
+  left: 44%;
+  bottom: 18%;
+  width: 12%;
+  height: 4px;
+  background: var(--magenta);
+  box-shadow: 0 0 8px var(--magenta);
+}
+
 /* ===== detail screen ===== */
 .av-detail {
   display: grid;

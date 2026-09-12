@@ -5,7 +5,7 @@ export interface Game {
   title: string;
   short: string;
   long: string;
-  cat: "PUZZLE" | "SHOOTER";
+  cat: "PUZZLE" | "SHOOTER" | "ARCADE";
   cover: string; // clase CSS cover-*
   color: "cyan" | "magenta" | "yellow" | "green";
   best: number;
@@ -35,9 +35,20 @@ export const GAMES: Game[] = [
     best: 0,
     plays: "0",
   },
+  {
+    id: "arkanoid",
+    title: "ARKANOID",
+    short: "Rebota, rompe bloques y limpia 5 niveles.",
+    long: "Controla una paleta con teclado o mouse y rebota una pelota para pulverizar cinco tableros de bloques cromáticos cada vez más veloces. Tres vidas, cero piedad.",
+    cat: "ARCADE",
+    cover: "cover-arkanoid",
+    color: "magenta",
+    best: 0,
+    plays: "0",
+  },
 ];
 
-export const CATS: string[] = ["TODOS", "PUZZLE", "SHOOTER"];
+export const CATS: string[] = ["TODOS", "PUZZLE", "SHOOTER", "ARCADE"];
 
 export const PLAYERS: string[] = [
   "PX_KAI",

@@ -9,6 +9,7 @@ import type {
 } from "react";
 import AsteroidsCanvas from "./asteroides/AsteroidsCanvas";
 import TetrisCanvas from "./tetris/TetrisCanvas";
+import ArkanoidCanvas from "./arkanoid/ArkanoidCanvas";
 
 export interface GameEngineHandle {
   pause: () => void;
@@ -59,5 +60,11 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     secondaryStatLabel: "Líneas",
     formatSecondaryStat: formatNumber,
     screenClassName: "crt-screen--narrow",
+  },
+  arkanoid: {
+    Canvas: ArkanoidCanvas as ComponentType<unknown> as GameCanvasComponent,
+    hasRealLeaderboard: true,
+    secondaryStatLabel: "Vidas",
+    formatSecondaryStat: formatHearts,
   },
 };

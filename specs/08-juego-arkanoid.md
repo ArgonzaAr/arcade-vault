@@ -1,6 +1,6 @@
 # 08 — Juego Arkanoid (motor real + leaderboard)
 
-**Estado:** Borrador
+**Estado:** Aprobado
 **Depende de:** SPEC 05, SPEC 06, SPEC 07
 **Fecha:** 2026-09-11
 
