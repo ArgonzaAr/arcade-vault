@@ -744,6 +744,37 @@ a {
   box-shadow: 0 0 8px var(--magenta);
 }
 
+.cover-snake {
+  background: radial-gradient(circle at 50% 40%, #003a1a, #08120a);
+}
+.cover-snake::after {
+  content: "";
+  position: absolute;
+  inset: 20% 25% 20% 25%;
+  background:
+    linear-gradient(var(--green), var(--green)) 0 0/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 16.6% 0/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 33.2% 0/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 33.2% 16.6%/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 33.2% 33.2%/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 49.8% 33.2%/16.6% 16.6%,
+    linear-gradient(var(--green), var(--green)) 66.4% 33.2%/16.6% 16.6%,
+    linear-gradient(#ff006e, #ff006e) 83% 50%/16.6% 16.6%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.4));
+  image-rendering: pixelated;
+}
+.cover-snake::before {
+  content: "";
+  position: absolute;
+  left: 44%;
+  bottom: 18%;
+  width: 12%;
+  height: 4px;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
 /* ===== detail screen ===== */
 .av-detail {
   display: grid;

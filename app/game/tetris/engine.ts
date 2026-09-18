@@ -174,6 +174,15 @@ export function createTetrisGame(
   const nextCtx = nextCanvas.getContext("2d")!;
 
   function onKeyDown(e: KeyboardEvent) {
+    if (
+      e.code === "ArrowLeft" ||
+      e.code === "ArrowRight" ||
+      e.code === "ArrowDown" ||
+      e.code === "ArrowUp" ||
+      e.code === "Space"
+    ) {
+      e.preventDefault();
+    }
     if (paused || over) return;
     switch (e.code) {
       case "ArrowLeft":
@@ -192,7 +201,6 @@ export function createTetrisGame(
         tryRotate();
         break;
       case "Space":
-        e.preventDefault();
         hardDrop();
         break;
       default:

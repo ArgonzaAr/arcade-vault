@@ -46,6 +46,17 @@ export const GAMES: Game[] = [
     best: 0,
     plays: "0",
   },
+  {
+    id: "snake",
+    title: "SNAKE",
+    short: "Come, crece y no te muerdas la cola.",
+    long: "Víbora clásica sobre un tablero toroidal: atraviesa los bordes sin penalidad, come frutas para crecer y ganar puntos, y evita chocar contra tu propio cuerpo mientras la velocidad aumenta con cada fruta.",
+    cat: "ARCADE",
+    cover: "cover-snake",
+    color: "green",
+    best: 0,
+    plays: "0",
+  },
 ];
 
 export const CATS: string[] = ["TODOS", "PUZZLE", "SHOOTER", "ARCADE"];

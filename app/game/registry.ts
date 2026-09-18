@@ -10,6 +10,7 @@ import type {
 import AsteroidsCanvas from "./asteroides/AsteroidsCanvas";
 import TetrisCanvas from "./tetris/TetrisCanvas";
 import ArkanoidCanvas from "./arkanoid/ArkanoidCanvas";
+import SnakeCanvas from "./snake/SnakeCanvas";
 
 export interface GameEngineHandle {
   pause: () => void;
@@ -66,5 +67,11 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     hasRealLeaderboard: true,
     secondaryStatLabel: "Vidas",
     formatSecondaryStat: formatHearts,
+  },
+  snake: {
+    Canvas: SnakeCanvas as ComponentType<unknown> as GameCanvasComponent,
+    hasRealLeaderboard: true,
+    secondaryStatLabel: "Longitud",
+    formatSecondaryStat: formatNumber,
   },
 };
