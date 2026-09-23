@@ -16,6 +16,8 @@ Este repo sigue spec-driven design: features grandes se definen en `specs/` ante
 - `/spec-impl` — implementa una spec ya escrita.
 - `/juego-nuevo` — variante especializada de `/spec` precargada con la arquitectura ya fijada para juegos (registro por id + leaderboard real en Supabase). Usar antes de portar un juego de `references/started-games/` o crear uno desde cero; solo produce la spec en `specs/`, no implementa.
 
+Antes de `/juego-nuevo`, cuando aún no está decidido qué juego sigue, usar el agente `game-planner` (`.claude/agents/game-planner.md`). Su memoria son `references/game-ideas.md` (todas las ideas evaluadas, incluidas las descartadas) y `references/game-todo-collections.md` (cola priorizada con briefs listos para `/juego-nuevo`) y `references/game-suggestions-todo.md` (To do con cada sugerencia accionable, ids `S-NNN`): siempre los lee antes de proponer y los actualiza al terminar.
+
 Estas tres skills están symlinkeadas en `.claude/skills/` desde `E:\Users\1187574\Documents\skills_offline_claude\fernando-skills-main` (instalación offline; el paquete `Klerith/fernando-skills` vía `npx skills@latest add` falla por red en este entorno — usar el script `scripts/install-to-agent.sh claude` de esa carpeta si hace falta reinstalar).
 
 ## Juegos con motor real
