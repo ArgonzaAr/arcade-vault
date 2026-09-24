@@ -6,6 +6,7 @@ import {
   type AsteroidsGame,
   type AsteroidsStats,
 } from "./engine";
+import type { SkinId } from "@/app/game/skins";
 
 export interface AsteroidsCanvasHandle {
   pause: () => void;
@@ -17,10 +18,11 @@ export interface AsteroidsCanvasHandle {
 interface AsteroidsCanvasProps {
   onStats: (stats: AsteroidsStats) => void;
   onGameOver: (finalScore: number) => void;
+  skin: SkinId;
 }
 
 const AsteroidsCanvas = forwardRef<AsteroidsCanvasHandle, AsteroidsCanvasProps>(
-  function AsteroidsCanvas({ onStats, onGameOver }, ref) {
+  function AsteroidsCanvas({ onStats, onGameOver, skin }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameRef = useRef<AsteroidsGame | null>(null);
 
@@ -28,7 +30,7 @@ const AsteroidsCanvas = forwardRef<AsteroidsCanvasHandle, AsteroidsCanvasProps>(
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const game = createAsteroidsGame(canvas, { onStats, onGameOver });
+      const game = createAsteroidsGame(canvas, { onStats, onGameOver }, skin);
       gameRef.current = game;
       game.start();
 
@@ -38,6 +40,11 @@ const AsteroidsCanvas = forwardRef<AsteroidsCanvasHandle, AsteroidsCanvasProps>(
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Cambiar de skin solo repinta; no reinicia la partida ni toca la pausa.
+    useEffect(() => {
+      gameRef.current?.setSkin(skin);
+    }, [skin]);
 
     useImperativeHandle(ref, () => ({
       pause: () => gameRef.current?.pause(),

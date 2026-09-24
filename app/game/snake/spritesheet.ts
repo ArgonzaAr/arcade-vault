@@ -45,6 +45,11 @@ export function loadSpritesheet(cb: () => void): void {
   rawImg.src = "/games/snake/fruits.png";
 }
 
+/** Hoja ya cargada (canvas), o null si aún no termina de cargar. Para cachés de skins. */
+export function getSpritesheet(): HTMLCanvasElement | null {
+  return ssLoaded ? ssImg : null;
+}
+
 export function drawFruit(
   ctx: CanvasRenderingContext2D,
   name: string,

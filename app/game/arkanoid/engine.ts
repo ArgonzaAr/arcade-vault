@@ -8,7 +8,19 @@ import {
   drawFrame,
   EXPLOSION_FRAMES,
   EXPLOSION_DURATION,
+  SPRITES,
+  getSpritesheet,
+  type SpriteFrame,
 } from "./spritesheet";
+import {
+  DEFAULT_SKIN,
+  rampMapper,
+  recolorSprite,
+  tintMapper,
+  withGlow,
+  type Rgb,
+  type SkinId,
+} from "../skins";
 
 export interface ArkanoidStats {
   score: number;
@@ -28,7 +40,67 @@ export interface ArkanoidGame {
   restart: () => void;
   destroy: () => void;
   forceGameOver: () => void;
+  // Cambia solo el aspecto; no reinicia ni avanza la simulación.
+  setSkin: (skin: SkinId) => void;
 }
+
+// ===== Paletas por skin (solo visuales) =====
+// clasico dibuja el spritesheet tal cual; neon y retro usan copias del mismo
+// sprite recoloreadas por luminancia (conservan el sombreado) y cacheadas.
+interface ArkanoidPalette {
+  background: string;
+  // null = sprite original; "tint" = tono saturado por pieza; "ramp" = tonos limitados.
+  recolor: null | "tint" | "ramp";
+  blocks: Record<string, string>; // tono por color de bloque (tint)
+  paddle: string;
+  ball: string;
+  ramp: readonly string[]; // tonos oscuro → claro (ramp)
+  glow: number; // shadowBlur de los sprites; 0 = sin glow
+  smoothing: boolean;
+}
+
+const ARKANOID_PALETTES: Record<SkinId, ArkanoidPalette> = {
+  // Look original exacto: spritesheet sin tocar sobre negro.
+  clasico: {
+    background: "#000",
+    recolor: null,
+    blocks: {},
+    paddle: "",
+    ball: "",
+    ramp: [],
+    glow: 0,
+    smoothing: true,
+  },
+  neon: {
+    background: "#05030d",
+    recolor: "tint",
+    blocks: {
+      red: "#ff2b4e",
+      yellow: "#f5ff00",
+      cyan: "#00f5ff",
+      magenta: "#c026ff",
+      hotpink: "#ff006e",
+      green: "#00ff88",
+      gray: "#d6dcff",
+    },
+    paddle: "#00f5ff",
+    ball: "#f5ff00",
+    ramp: [],
+    glow: 8,
+    smoothing: false,
+  },
+  // Monitor de fósforo ámbar: 4 tonos + fondo.
+  retro: {
+    background: "#140a00",
+    recolor: "ramp",
+    blocks: {},
+    paddle: "",
+    ball: "",
+    ramp: ["#5a3400", "#a86200", "#f09a00", "#ffd27a"],
+    glow: 0,
+    smoothing: false,
+  },
+};
 
 const W = 800;
 const H = 600;
@@ -78,9 +150,13 @@ interface Explosion {
 
 export function createArkanoidGame(
   canvas: HTMLCanvasElement,
-  callbacks: ArkanoidCallbacks
+  callbacks: ArkanoidCallbacks,
+  skin: SkinId = DEFAULT_SKIN
 ): ArkanoidGame {
   const ctx = canvas.getContext("2d")!;
+  let palette = ARKANOID_PALETTES[skin] ?? ARKANOID_PALETTES[DEFAULT_SKIN];
+  // Sprites recoloreados de la skin activa, a tamaño de destino.
+  let spriteCache = new Map<string, HTMLCanvasElement>();
 
   const bounceSound = new Audio("/games/arkanoid/ball-bounce.mp3");
   const breakSound = new Audio("/games/arkanoid/break-sound.mp3");
@@ -271,14 +347,66 @@ export function createArkanoidGame(
     emitStats();
   }
 
+  // Dibuja `frame` con la skin activa (recoloreado + glow, cacheado por clave).
+  function drawSkinned(
+    key: string,
+    frame: SpriteFrame | undefined,
+    tone: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number
+  ) {
+    if (!frame) return;
+    let sprite = spriteCache.get(key);
+    if (!sprite) {
+      const sheet = getSpritesheet();
+      if (!sheet) return;
+      const map: (n: number) => Rgb =
+        palette.recolor === "ramp"
+          ? rampMapper(palette.ramp)
+          : tintMapper(tone || "#ffffff");
+      sprite = recolorSprite(
+        sheet,
+        frame.sx,
+        frame.sy,
+        frame.sw,
+        frame.sh,
+        w,
+        h,
+        map,
+        { smoothing: false, hardAlpha: palette.recolor === "ramp" }
+      );
+      if (palette.glow > 0 && tone)
+        sprite = withGlow(sprite, palette.glow, tone);
+      spriteCache.set(key, sprite);
+    }
+    const pad = (sprite.width - w) / 2;
+    ctx.drawImage(sprite, x - pad, y - pad);
+  }
+
   function draw() {
-    ctx.fillStyle = "#000";
+    ctx.imageSmoothingEnabled = palette.smoothing;
+    ctx.fillStyle = palette.background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (!spritesReady) return;
 
+    const skinned = palette.recolor !== null;
+
     for (const block of blocks) {
-      if (block.alive)
+      if (!block.alive) continue;
+      if (skinned)
+        drawSkinned(
+          "block:" + block.color,
+          SPRITES.blocks[block.color],
+          palette.blocks[block.color] ?? "",
+          block.x,
+          block.y,
+          block.w,
+          block.h
+        );
+      else
         drawSprite(
           ctx,
           "block_" + block.color,
@@ -294,18 +422,50 @@ export function createArkanoidGame(
         Math.floor((exp.elapsed / EXPLOSION_DURATION) * 4),
         3
       );
-      drawFrame(
-        ctx,
-        EXPLOSION_FRAMES[exp.color][frameIndex],
-        exp.x,
-        exp.y,
-        exp.w,
-        exp.h
-      );
+      if (skinned)
+        drawSkinned(
+          "exp:" + exp.color + ":" + frameIndex,
+          EXPLOSION_FRAMES[exp.color]?.[frameIndex],
+          palette.blocks[exp.color] ?? "",
+          exp.x,
+          exp.y,
+          exp.w,
+          exp.h
+        );
+      else
+        drawFrame(
+          ctx,
+          EXPLOSION_FRAMES[exp.color][frameIndex],
+          exp.x,
+          exp.y,
+          exp.w,
+          exp.h
+        );
     }
 
-    drawSprite(ctx, "paddle", paddle.x, paddle.y, paddle.w, paddle.h);
-    drawSprite(ctx, "ball", ball.x, ball.y, ball.w, ball.h);
+    if (skinned) {
+      drawSkinned(
+        "paddle",
+        SPRITES.paddle,
+        palette.paddle,
+        paddle.x,
+        paddle.y,
+        paddle.w,
+        paddle.h
+      );
+      drawSkinned(
+        "ball",
+        SPRITES.ball,
+        palette.ball,
+        ball.x,
+        ball.y,
+        ball.w,
+        ball.h
+      );
+    } else {
+      drawSprite(ctx, "paddle", paddle.x, paddle.y, paddle.w, paddle.h);
+      drawSprite(ctx, "ball", ball.x, ball.y, ball.w, ball.h);
+    }
   }
 
   let animationFrameId: number | null = null;
@@ -382,6 +542,14 @@ export function createArkanoidGame(
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
       canvas.removeEventListener("mousemove", onMouseMove);
+    },
+    setSkin(nextSkin: SkinId) {
+      const next = ARKANOID_PALETTES[nextSkin];
+      if (!next || next === palette) return;
+      palette = next;
+      spriteCache = new Map();
+      // En pausa o game over el loop está detenido: repinta un frame sin simular.
+      if (animationFrameId === null) draw();
     },
   };
 }

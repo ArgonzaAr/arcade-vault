@@ -8,10 +8,10 @@ import {
 } from "./engine";
 import type { GameCanvasProps, GameEngineHandle } from "@/app/game/registry";
 
-export interface ArkanoidCanvasHandle extends GameEngineHandle {}
+export type ArkanoidCanvasHandle = GameEngineHandle;
 
 const ArkanoidCanvas = forwardRef<ArkanoidCanvasHandle, GameCanvasProps>(
-  function ArkanoidCanvas({ onStats, onGameOver }, ref) {
+  function ArkanoidCanvas({ onStats, onGameOver, skin }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const gameRef = useRef<ArkanoidGame | null>(null);
 
@@ -21,10 +21,14 @@ const ArkanoidCanvas = forwardRef<ArkanoidCanvasHandle, GameCanvasProps>(
 
       const handleStats = (stats: ArkanoidStats) => onStats(stats);
 
-      const game = createArkanoidGame(canvas, {
-        onStats: handleStats,
-        onGameOver,
-      });
+      const game = createArkanoidGame(
+        canvas,
+        {
+          onStats: handleStats,
+          onGameOver,
+        },
+        skin
+      );
       gameRef.current = game;
       game.start();
 
@@ -34,6 +38,11 @@ const ArkanoidCanvas = forwardRef<ArkanoidCanvasHandle, GameCanvasProps>(
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Cambiar de skin solo repinta; no reinicia la partida ni toca la pausa.
+    useEffect(() => {
+      gameRef.current?.setSkin(skin);
+    }, [skin]);
 
     useImperativeHandle(ref, () => ({
       pause: () => gameRef.current?.pause(),

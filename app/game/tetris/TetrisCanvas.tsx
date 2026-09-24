@@ -4,10 +4,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { createTetrisGame, type TetrisGame, type TetrisStats } from "./engine";
 import type { GameCanvasProps, GameEngineHandle } from "@/app/game/registry";
 
-export interface TetrisCanvasHandle extends GameEngineHandle {}
+export type TetrisCanvasHandle = GameEngineHandle;
 
 const TetrisCanvas = forwardRef<TetrisCanvasHandle, GameCanvasProps>(
-  function TetrisCanvas({ onStats, onGameOver }, ref) {
+  function TetrisCanvas({ onStats, onGameOver, skin }, ref) {
     const boardRef = useRef<HTMLCanvasElement>(null);
     const nextRef = useRef<HTMLCanvasElement>(null);
     const gameRef = useRef<TetrisGame | null>(null);
@@ -20,10 +20,12 @@ const TetrisCanvas = forwardRef<TetrisCanvasHandle, GameCanvasProps>(
       const handleStats = (stats: TetrisStats) =>
         onStats({ score: stats.score, lives: stats.lines, level: stats.level });
 
-      const game = createTetrisGame(boardCanvas, nextCanvas, {
-        onStats: handleStats,
-        onGameOver,
-      });
+      const game = createTetrisGame(
+        boardCanvas,
+        nextCanvas,
+        { onStats: handleStats, onGameOver },
+        skin
+      );
       gameRef.current = game;
       game.start();
 
@@ -33,6 +35,11 @@ const TetrisCanvas = forwardRef<TetrisCanvasHandle, GameCanvasProps>(
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Cambiar de skin solo repinta; no reinicia la partida ni toca la pausa.
+    useEffect(() => {
+      gameRef.current?.setSkin(skin);
+    }, [skin]);
 
     useImperativeHandle(ref, () => ({
       pause: () => gameRef.current?.pause(),

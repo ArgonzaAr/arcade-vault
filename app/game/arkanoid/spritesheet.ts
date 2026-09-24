@@ -101,6 +101,11 @@ export function loadSpritesheet(cb: () => void): void {
   rawImg.src = "/games/arkanoid/spritesheet-breakout.png";
 }
 
+/** Hoja ya cargada (canvas), o null si aún no termina de cargar. Para cachés de skins. */
+export function getSpritesheet(): HTMLCanvasElement | null {
+  return ssLoaded ? ssImg : null;
+}
+
 export function drawFrame(
   ctx: CanvasRenderingContext2D,
   frame: SpriteFrame,

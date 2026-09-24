@@ -959,6 +959,72 @@ a {
   display: flex;
   gap: 10px;
 }
+/* Selector de skin: control segmentado con el mismo lenguaje que .btn */
+.hud-skin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hud-skin .l {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.hud-skin-opts {
+  display: flex;
+}
+.hud-skin-opts button {
+  position: relative;
+  padding: 6px 10px;
+  font-family: var(--pixel);
+  font-size: 8px;
+  line-height: 1.25;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition:
+    color 160ms,
+    border-color 160ms,
+    box-shadow 160ms ease;
+}
+.hud-skin-opts button + button {
+  margin-left: -1px;
+}
+.hud-skin-opts button:first-child {
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
+}
+.hud-skin-opts button:last-child {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    0 100%
+  );
+}
+.hud-skin-opts button:hover {
+  color: var(--ink);
+  border-color: rgba(0, 245, 255, 0.45);
+}
+.hud-skin-opts button.active {
+  z-index: 1;
+  color: var(--cyan);
+  border-color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0, 245, 255, 0.5);
+  box-shadow:
+    0 0 14px rgba(0, 245, 255, 0.55),
+    inset 0 0 8px rgba(0, 245, 255, 0.35);
+}
+.hud-skin-opts button:focus-visible {
+  z-index: 2;
+  /* hacia dentro: clip-path recortaría un outline exterior */
+  outline: 1px solid var(--yellow);
+  outline-offset: -4px;
+}
 
 .crt {
   position: relative;

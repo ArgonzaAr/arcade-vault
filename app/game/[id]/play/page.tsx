@@ -10,6 +10,12 @@ import {
   type GameEngineHandle,
   type GameStats,
 } from "@/app/game/registry";
+import {
+  DEFAULT_SKIN,
+  SKIN_LABELS,
+  isSkinId,
+  type SkinId,
+} from "@/app/game/skins";
 
 interface StoredUser {
   name: string;
@@ -33,6 +39,8 @@ export default function GamePlayerPage() {
   const [over, setOver] = useState(false);
   const [name, setName] = useState("INVITADO");
   const [saved, setSaved] = useState(false);
+  const [skin, setSkin] = useState<SkinId>(DEFAULT_SKIN);
+  const skinKey = "av_skin_" + game.id;
 
   useEffect(() => {
     try {
@@ -42,6 +50,26 @@ export default function GamePlayerPage() {
       if (stored) setName(stored.name);
     } catch {}
   }, []);
+
+  // Skin recordada por juego; solo se aplica si este juego la ofrece.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(skinKey);
+      if (isSkinId(raw) && entry?.skins.includes(raw)) {
+        // Sincroniza con localStorage tras hidratar (no disponible en SSR).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSkin(raw);
+      }
+    } catch {}
+  }, [skinKey, entry]);
+
+  // Solo cambia el aspecto: no pausa, no reinicia ni toca score/over.
+  const changeSkin = (nextSkin: SkinId) => {
+    setSkin(nextSkin);
+    try {
+      localStorage.setItem(skinKey, nextSkin);
+    } catch {}
+  };
 
   useEffect(() => {
     if (hasEngine || over || paused) return;
@@ -136,6 +164,28 @@ export default function GamePlayerPage() {
             <div className="l">Nivel</div>
             <div className="v">{String(level).padStart(2, "0")}</div>
           </div>
+          {entry && entry.skins.length > 1 && (
+            <div className="hud-skin" role="group" aria-label="Skin">
+              <div className="l">Skin</div>
+              <div className="hud-skin-opts">
+                {entry.skins.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={id === skin ? "active" : undefined}
+                    aria-pressed={id === skin}
+                    onClick={(e) => {
+                      changeSkin(id);
+                      // Devuelve el teclado al juego (Espacio/flechas).
+                      e.currentTarget.blur();
+                    }}
+                  >
+                    {SKIN_LABELS[id]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="hud-actions">
           <button className="btn yellow" onClick={togglePause}>
@@ -165,6 +215,7 @@ export default function GamePlayerPage() {
               ref={engineRef}
               onStats={handleStats}
               onGameOver={handleGameOver}
+              skin={skin}
             />
           ) : (
             <div className="game-arena">
