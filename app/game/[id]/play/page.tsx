@@ -16,6 +16,8 @@ import {
   isSkinId,
   type SkinId,
 } from "@/app/game/skins";
+import TouchGamepad from "@/app/game/TouchGamepad";
+import { useIsTouchDevice } from "@/app/game/useIsTouchDevice";
 
 interface StoredUser {
   name: string;
@@ -41,6 +43,21 @@ export default function GamePlayerPage() {
   const [saved, setSaved] = useState(false);
   const [skin, setSkin] = useState<SkinId>(DEFAULT_SKIN);
   const skinKey = "av_skin_" + game.id;
+
+  // Gamepad virtual solo en táctil y solo para juegos con motor real.
+  const isTouch = useIsTouchDevice();
+  const [landscape, setLandscape] = useState(false);
+  const showPad = isTouch && Boolean(entry);
+  const padPlacement = landscape ? "sides" : "below";
+
+  // Rotar solo reacomoda el layout: no pausa ni reinicia la partida.
+  useEffect(() => {
+    const mql = window.matchMedia("(orientation: landscape)");
+    const sync = () => setLandscape(mql.matches);
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     try {
@@ -106,6 +123,19 @@ export default function GamePlayerPage() {
     });
   };
 
+  // Pausa automática al ocultar la pestaña (cambio de app en el teléfono),
+  // igual que el botón PAUSA. La reanudación es siempre manual.
+  useEffect(() => {
+    if (!hasEngine || paused || over) return;
+    const onVisibility = () => {
+      if (document.visibilityState !== "hidden") return;
+      engineRef.current?.pause();
+      setPaused(true);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [hasEngine, paused, over]);
+
   const endGame = () => {
     if (hasEngine) {
       engineRef.current?.forceGameOver();
@@ -141,7 +171,7 @@ export default function GamePlayerPage() {
   return (
     <div className="av-player fade-in">
       <div className="player-hud">
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+        <div className="hud-stats">
           <div className="hud-stat">
             <div className="l">Jugador</div>
             <div className="v" style={{ color: "var(--ink)" }}>
@@ -203,58 +233,71 @@ export default function GamePlayerPage() {
         </div>
       </div>
 
-      <div className="crt">
-        <div
-          className={
-            "crt-screen" +
-            (entry?.screenClassName ? ` ${entry.screenClassName}` : "")
-          }
-        >
-          {entry ? (
-            <entry.Canvas
-              ref={engineRef}
-              onStats={handleStats}
-              onGameOver={handleGameOver}
-              skin={skin}
-            />
-          ) : (
-            <div className="game-arena">
-              <div className="grid-floor"></div>
-              <div className="enemy e1"></div>
-              <div className="enemy e2"></div>
-              <div className="enemy e3"></div>
-              <div className="player-ship"></div>
-            </div>
-          )}
-          {paused && (
-            <div
-              className="crt-content"
-              style={{ background: "rgba(0,0,0,0.6)", zIndex: 5 }}
-            >
-              <div>
-                <div className="pixel neon-yellow" style={{ fontSize: 22 }}>
-                  EN PAUSA
-                </div>
-                <div
-                  className="mono"
-                  style={{
-                    fontSize: 11,
-                    color: "var(--ink-dim)",
-                    marginTop: 10,
-                    letterSpacing: "0.16em",
-                  }}
-                >
-                  PULSA REANUDAR PARA CONTINUAR
+      <div
+        className={
+          "play-stage" + (showPad ? ` play-stage--${padPlacement}` : "")
+        }
+      >
+        <div className="crt">
+          <div
+            className={
+              "crt-screen" +
+              (entry?.screenClassName ? ` ${entry.screenClassName}` : "")
+            }
+          >
+            {entry ? (
+              <entry.Canvas
+                ref={engineRef}
+                onStats={handleStats}
+                onGameOver={handleGameOver}
+                skin={skin}
+              />
+            ) : (
+              <div className="game-arena">
+                <div className="grid-floor"></div>
+                <div className="enemy e1"></div>
+                <div className="enemy e2"></div>
+                <div className="enemy e3"></div>
+                <div className="player-ship"></div>
+              </div>
+            )}
+            {paused && (
+              <div
+                className="crt-content"
+                style={{ background: "rgba(0,0,0,0.6)", zIndex: 5 }}
+              >
+                <div>
+                  <div className="pixel neon-yellow" style={{ fontSize: 22 }}>
+                    EN PAUSA
+                  </div>
+                  <div
+                    className="mono"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--ink-dim)",
+                      marginTop: 10,
+                      letterSpacing: "0.16em",
+                    }}
+                  >
+                    PULSA REANUDAR PARA CONTINUAR
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="crt-bottom">
+            <span className="led">SEÑAL OK</span>
+            <span>{game.title} · CRT-83 · 60 HZ</span>
+            <span>CARGA · 1MB</span>
+          </div>
         </div>
-        <div className="crt-bottom">
-          <span className="led">SEÑAL OK</span>
-          <span>{game.title} · CRT-83 · 60 HZ</span>
-          <span>CARGA · 1MB</span>
-        </div>
+        {showPad && entry && (
+          <TouchGamepad
+            config={entry.touchControls}
+            disabled={paused || over}
+            placement={padPlacement}
+          />
+        )}
       </div>
 
       {over && (

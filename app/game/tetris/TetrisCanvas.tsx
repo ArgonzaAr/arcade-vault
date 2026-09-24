@@ -6,11 +6,38 @@ import type { GameCanvasProps, GameEngineHandle } from "@/app/game/registry";
 
 export type TetrisCanvasHandle = GameEngineHandle;
 
+// Tamaño de .crt-screen--narrow en escritorio, para el que está maquetado el
+// bloque tablero + panel. En pantallas más chicas (móvil) se escala entero.
+const BASE_W = 460;
+const BASE_H = 627;
+
 const TetrisCanvas = forwardRef<TetrisCanvasHandle, GameCanvasProps>(
   function TetrisCanvas({ onStats, onGameOver, skin }, ref) {
     const boardRef = useRef<HTMLCanvasElement>(null);
     const nextRef = useRef<HTMLCanvasElement>(null);
     const gameRef = useRef<TetrisGame | null>(null);
+    const wrapRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
+
+    // Escala tablero + panel al espacio disponible; nunca agranda (scale ≤ 1),
+    // así el layout de escritorio queda igual.
+    useEffect(() => {
+      const wrap = wrapRef.current;
+      const content = contentRef.current;
+      if (!wrap || !content) return;
+      const fit = () => {
+        const s = Math.min(
+          1,
+          wrap.clientWidth / BASE_W,
+          wrap.clientHeight / BASE_H
+        );
+        content.style.transform = s < 1 ? `scale(${s})` : "";
+      };
+      fit();
+      const ro = new ResizeObserver(fit);
+      ro.observe(wrap);
+      return () => ro.disconnect();
+    }, []);
 
     useEffect(() => {
       const boardCanvas = boardRef.current;
@@ -50,78 +77,88 @@ const TetrisCanvas = forwardRef<TetrisCanvasHandle, GameCanvasProps>(
 
     return (
       <div
+        ref={wrapRef}
         style={{
           position: "absolute",
           inset: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 20,
         }}
       >
-        <canvas ref={boardRef} width={300} height={600} />
-        <aside
-          className="mono"
+        <div
+          ref={contentRef}
           style={{
             display: "flex",
-            flexDirection: "column",
-            gap: 16,
-            width: 120,
+            alignItems: "center",
+            gap: 20,
+            flexShrink: 0,
           }}
         >
-          <div>
-            <div
-              className="pixel"
-              style={{
-                fontSize: 10,
-                color: "var(--ink-faint)",
-                letterSpacing: "0.14em",
-                marginBottom: 6,
-              }}
-            >
-              SIGUIENTE
+          <canvas ref={boardRef} width={300} height={600} />
+          <aside
+            className="mono"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+              width: 120,
+            }}
+          >
+            <div>
+              <div
+                className="pixel"
+                style={{
+                  fontSize: 10,
+                  color: "var(--ink-faint)",
+                  letterSpacing: "0.14em",
+                  marginBottom: 6,
+                }}
+              >
+                SIGUIENTE
+              </div>
+              <canvas ref={nextRef} width={120} height={120} />
             </div>
-            <canvas ref={nextRef} width={120} height={120} />
-          </div>
-          <div>
-            <div
-              className="pixel"
-              style={{
-                fontSize: 10,
-                color: "var(--ink-faint)",
-                letterSpacing: "0.14em",
-                marginBottom: 6,
-              }}
-            >
-              CONTROLES
+            <div>
+              <div
+                className="pixel"
+                style={{
+                  fontSize: 10,
+                  color: "var(--ink-faint)",
+                  letterSpacing: "0.14em",
+                  marginBottom: 6,
+                }}
+              >
+                CONTROLES
+              </div>
+              <ul
+                style={{
+                  listStyle: "none",
+                  margin: 0,
+                  padding: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  fontSize: 11,
+                  color: "var(--ink-dim)",
+                }}
+              >
+                <li>
+                  <kbd>←</kbd> <kbd>→</kbd> mover
+                </li>
+                <li>
+                  <kbd>↑</kbd> / <kbd>X</kbd> rotar
+                </li>
+                <li>
+                  <kbd>↓</kbd> bajar
+                </li>
+                <li>
+                  <kbd>Espacio</kbd> caída
+                </li>
+              </ul>
             </div>
-            <ul
-              style={{
-                listStyle: "none",
-                margin: 0,
-                padding: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-                fontSize: 11,
-                color: "var(--ink-dim)",
-              }}
-            >
-              <li>
-                <kbd>←</kbd> <kbd>→</kbd> mover
-              </li>
-              <li>
-                <kbd>↑</kbd> / <kbd>X</kbd> rotar
-              </li>
-              <li>
-                <kbd>↓</kbd> bajar
-              </li>
-              <li>
-                <kbd>Espacio</kbd> caída
-              </li>
-            </ul>
-          </div>
-        </aside>
+          </aside>
+        </div>
       </div>
     );
   }

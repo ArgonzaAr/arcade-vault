@@ -26,7 +26,7 @@ Estas tres skills están symlinkeadas en `.claude/skills/` desde `E:\Users\11875
 
 ## Juegos con motor real
 
-Cada juego con motor real se registra por id en `app/game/registry.ts` (nunca `if (id === "...")` encadenados en los consumidores). Una entrada define `Canvas`, `hasRealLeaderboard`, el label/formato del stat secundario del HUD (p.ej. vidas como corazones, líneas o longitud como número) y opcionalmente `screenClassName` cuando el tablero no encaja en el 4:3 por defecto.
+Cada juego con motor real se registra por id en `app/game/registry.ts` (nunca `if (id === "...")` encadenados en los consumidores). Una entrada define `Canvas`, `hasRealLeaderboard`, el label/formato del stat secundario del HUD (p.ej. vidas como corazones, líneas o longitud como número) y opcionalmente `screenClassName` cuando el tablero no encaja en el 4:3 por defecto. También declara, obligatoriamente, `touchControls` (`app/game/touch.ts`): los botones del gamepad virtual que se muestra en dispositivos táctiles (spec `10-controles-tactiles-movil.md`). El gamepad despacha `KeyboardEvent` sintéticos en `document`, así que los motores deben leer solo `e.key`/`e.code` (nunca `keyCode`/`which` ni `isTrusted`).
 
 Juegos portados hasta ahora (motor + leaderboard en Supabase por slug, vía `app/lib/supabase/queries.ts` / `queries.client.ts`):
 

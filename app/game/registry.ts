@@ -12,6 +12,14 @@ import TetrisCanvas from "./tetris/TetrisCanvas";
 import ArkanoidCanvas from "./arkanoid/ArkanoidCanvas";
 import SnakeCanvas from "./snake/SnakeCanvas";
 import type { SkinId } from "./skins";
+import {
+  KEY_DOWN,
+  KEY_LEFT,
+  KEY_RIGHT,
+  KEY_SPACE,
+  KEY_UP,
+  type TouchControlsConfig,
+} from "./touch";
 
 export interface GameEngineHandle {
   pause: () => void;
@@ -48,6 +56,8 @@ export interface GameRegistryEntry {
   screenClassName?: string;
   // Skins disponibles en el selector del HUD, en orden; siempre incluye "clasico".
   skins: SkinId[];
+  // Gamepad virtual que se muestra en dispositivos táctiles.
+  touchControls: TouchControlsConfig;
 }
 
 const formatHearts = (value: number) => "♥ ".repeat(value).trim() || "—";
@@ -60,6 +70,14 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     secondaryStatLabel: "Vidas",
     formatSecondaryStat: formatHearts,
     skins: ["clasico", "neon", "retro"],
+    touchControls: {
+      buttons: {
+        left: { emit: KEY_LEFT },
+        right: { emit: KEY_RIGHT },
+        up: { emit: KEY_UP }, // propulsar
+        a: { emit: KEY_SPACE, label: "DISPARO" },
+      },
+    },
   },
   tetris: {
     Canvas: TetrisCanvas as ComponentType<unknown> as GameCanvasComponent,
@@ -68,6 +86,15 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     formatSecondaryStat: formatNumber,
     screenClassName: "crt-screen--narrow",
     skins: ["clasico", "neon", "retro"],
+    touchControls: {
+      buttons: {
+        up: { emit: KEY_UP }, // rotar
+        down: { emit: KEY_DOWN, repeat: true }, // caída suave
+        left: { emit: KEY_LEFT, repeat: true },
+        right: { emit: KEY_RIGHT, repeat: true },
+        a: { emit: KEY_SPACE, label: "CAÍDA" }, // caída dura
+      },
+    },
   },
   arkanoid: {
     Canvas: ArkanoidCanvas as ComponentType<unknown> as GameCanvasComponent,
@@ -75,6 +102,12 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     secondaryStatLabel: "Vidas",
     formatSecondaryStat: formatHearts,
     skins: ["clasico", "neon", "retro"],
+    touchControls: {
+      buttons: {
+        left: { emit: KEY_LEFT },
+        right: { emit: KEY_RIGHT },
+      },
+    },
   },
   snake: {
     Canvas: SnakeCanvas as ComponentType<unknown> as GameCanvasComponent,
@@ -82,5 +115,13 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     secondaryStatLabel: "Longitud",
     formatSecondaryStat: formatNumber,
     skins: ["clasico", "neon", "retro"],
+    touchControls: {
+      buttons: {
+        up: { emit: KEY_UP },
+        down: { emit: KEY_DOWN },
+        left: { emit: KEY_LEFT },
+        right: { emit: KEY_RIGHT },
+      },
+    },
   },
 };

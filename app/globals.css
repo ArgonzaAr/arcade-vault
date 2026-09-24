@@ -929,6 +929,11 @@ a {
   margin-bottom: 18px;
   flex-wrap: wrap;
 }
+.hud-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
 .hud-stat {
   display: flex;
   flex-direction: column;
@@ -2774,4 +2779,356 @@ a {
 }
 .term-body .caret {
   animation: blink 1s steps(1) infinite;
+}
+
+/* ===== reproductor táctil: gamepad virtual + layout móvil (SPEC 10) =====
+   Todo vive bajo (pointer: coarse): en escritorio .play-stage es un div sin
+   estilos y el layout del reproductor no cambia. El gamepad es el panel de
+   control de la misma máquina: plástico del bisel (#1b1b22) y botones de
+   arcade que se encienden como fósforo al pulsarlos. */
+@media (pointer: coarse) {
+  .av-player {
+    /* alto del .av-nav sticky en pantallas < 840px */
+    --player-nav-h: 51px;
+    --crt-pad: 10px;
+    /* proporción de .crt-screen; .crt-screen--narrow la redefine */
+    --ar-w: 4;
+    --ar-h: 3;
+    margin: 10px auto;
+    padding: 0 12px 20px;
+  }
+  .av-player .crt-screen--narrow {
+    --ar-w: 11;
+    --ar-h: 15;
+  }
+
+  /* --- nav compacto, solo en el reproductor: en 360px no debe desbordar --- */
+  .av-nav:has(~ .av-main .av-player) {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .av-nav:has(~ .av-main .av-player) .logo-text {
+    font-size: 10px;
+  }
+  .av-nav:has(~ .av-main .av-player) .auth-btn,
+  .av-nav:has(~ .av-main .av-player) .hamburger {
+    margin-left: 0;
+    padding: 8px 10px;
+    font-size: 8px;
+    white-space: nowrap;
+  }
+
+  /* --- HUD compacto --- */
+  .player-hud {
+    gap: 8px 12px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    justify-content: center;
+  }
+  .hud-stats {
+    gap: 6px 14px;
+    justify-content: center;
+  }
+  .hud-stat {
+    gap: 2px;
+  }
+  .hud-stat .l,
+  .hud-skin .l {
+    font-size: 8px;
+  }
+  .hud-stat .v {
+    font-size: 11px;
+  }
+  .hud-skin-opts button {
+    padding: 5px 7px;
+    font-size: 7px;
+  }
+  .hud-actions {
+    gap: 6px;
+  }
+  .hud-actions .btn {
+    padding: 8px 10px;
+    font-size: 8px;
+    letter-spacing: 0.12em;
+  }
+
+  /* --- monitor --- */
+  .av-player .crt {
+    padding: var(--crt-pad);
+    border-radius: 18px;
+  }
+  .av-player .crt-bottom {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 12px;
+    margin-top: 8px;
+    font-size: 7px;
+  }
+
+  /* Sin scroll, zoom, selección ni menú de mantener pulsado en la zona de
+     juego; el resto de la página conserva scroll y zoom. */
+  .av-player .crt-screen,
+  .av-player .crt-screen canvas,
+  .touch-pad {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* El modal de fin cabe con el teclado del teléfono abierto. */
+  .av-player .modal-bd {
+    align-items: safe center;
+    overflow-y: auto;
+  }
+  .av-player .modal {
+    padding: 22px 18px;
+  }
+  .av-player .modal .input-row {
+    flex-wrap: wrap;
+  }
+  .av-player .modal .input-row input {
+    min-width: 0;
+    font-size: 16px; /* menos de 16px hace que iOS haga zoom al enfocar */
+  }
+
+  /* --- vertical: HUD / monitor / gamepad --- */
+  .play-stage--below {
+    display: flex;
+    flex-direction: column;
+  }
+  /* reserva: nav + HUD + bisel + pie del monitor + gamepad */
+  .play-stage--below .crt-screen {
+    width: min(100%, calc((100dvh - 450px) * var(--ar-w) / var(--ar-h)));
+    margin: 0 auto;
+  }
+
+  /* --- horizontal: cruceta | monitor | A/B, todo dentro del viewport --- */
+  @media (orientation: landscape) {
+    .av-player:has(.play-stage--sides) {
+      --crt-pad: 6px;
+      --pad-col: 136px;
+      display: flex;
+      flex-direction: column;
+      height: calc(100dvh - var(--player-nav-h));
+      margin: 0 auto;
+      padding: 6px 12px;
+    }
+    /* HUD en una sola fila: stats a la izquierda, acciones a la derecha. */
+    .av-player:has(.play-stage--sides) .player-hud {
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      padding: 4px 10px;
+    }
+    .av-player:has(.play-stage--sides) .hud-stats {
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 10px;
+    }
+    .av-player:has(.play-stage--sides) .hud-stat {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 5px;
+    }
+    /* El nombre se explica solo; el selector de skin también. */
+    .av-player:has(.play-stage--sides) .hud-stat:first-child .l,
+    .av-player:has(.play-stage--sides) .hud-skin .l {
+      display: none;
+    }
+    .av-player:has(.play-stage--sides) .hud-skin-opts button {
+      padding: 4px 6px;
+    }
+    .av-player:has(.play-stage--sides) .hud-actions .btn {
+      padding: 6px 8px;
+    }
+    .play-stage--sides {
+      flex: 1;
+      min-height: 0;
+      container-type: size;
+      display: grid;
+      grid-template-columns: var(--pad-col) auto var(--pad-col);
+      grid-template-areas: "dpad screen actions";
+      align-items: center;
+      justify-content: space-between;
+    }
+    .play-stage--sides .crt {
+      grid-area: screen;
+    }
+    /* El monitor se ajusta al hueco libre sin salirse de alto ni de ancho. */
+    .play-stage--sides .crt-screen {
+      width: min(
+        calc(100cqw - 2 * var(--pad-col) - 2 * var(--crt-pad) - 24px),
+        calc((100cqh - 2 * var(--crt-pad)) * var(--ar-w) / var(--ar-h))
+      );
+      max-width: none;
+    }
+    .play-stage--sides .crt-bottom {
+      display: none;
+    }
+  }
+
+  /* --- gamepad --- */
+  .touch-pad {
+    --dpad: 150px;
+    --round: 64px;
+    --plastic: #1b1b22;
+    --plastic-edge: #2a2a35;
+  }
+  .touch-pad--below {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 4px 4px;
+  }
+  .touch-pad--sides {
+    --dpad: 132px;
+    --round: 58px;
+    display: contents;
+  }
+  .touch-pad--sides .touch-dpad {
+    grid-area: dpad;
+    justify-self: start;
+  }
+  .touch-pad--sides .touch-actions {
+    grid-area: actions;
+    justify-self: end;
+  }
+
+  /* Cruceta: una sola pieza en cruz; los brazos no declarados no existen. */
+  .touch-dpad {
+    display: grid;
+    grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    width: var(--dpad);
+    height: var(--dpad);
+    filter: drop-shadow(0 4px 0 #0a0a0f)
+      drop-shadow(0 0 14px rgba(0, 245, 255, 0.12));
+  }
+  .touch-dpad-hub {
+    grid-area: 2 / 2;
+    background:
+      radial-gradient(circle, #0d0d12 0 28%, transparent 30%), var(--plastic);
+  }
+  .touch-dir--up {
+    grid-area: 1 / 2;
+    border-radius: 8px 8px 0 0;
+  }
+  .touch-dir--left {
+    grid-area: 2 / 1;
+    border-radius: 8px 0 0 8px;
+  }
+  .touch-dir--right {
+    grid-area: 2 / 3;
+    border-radius: 0 8px 8px 0;
+  }
+  .touch-dir--down {
+    grid-area: 3 / 2;
+    border-radius: 0 0 8px 8px;
+  }
+  .touch-btn {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    transition:
+      background 90ms,
+      box-shadow 90ms,
+      transform 60ms;
+  }
+  .touch-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .touch-dir {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--plastic);
+    box-shadow: inset 0 1px 0 var(--plastic-edge);
+  }
+  .touch-arrow {
+    width: 42%;
+    fill: var(--ink-faint);
+    transition: fill 90ms;
+  }
+  .touch-dir--down .touch-arrow {
+    transform: rotate(180deg);
+  }
+  .touch-dir--left .touch-arrow {
+    transform: rotate(-90deg);
+  }
+  .touch-dir--right .touch-arrow {
+    transform: rotate(90deg);
+  }
+  .touch-dir.is-pressed {
+    background: #101016;
+    box-shadow: inset 0 0 12px rgba(0, 245, 255, 0.35);
+  }
+  .touch-dir.is-pressed .touch-arrow {
+    fill: var(--cyan);
+    filter: drop-shadow(0 0 4px var(--cyan));
+  }
+
+  /* Botones de arcade: A magenta, B amarillo, rótulo impreso debajo. */
+  .touch-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+  }
+  .touch-pad--sides .touch-actions {
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 12px;
+  }
+  .touch-action {
+    --btn-color: var(--magenta);
+    --btn-glow: rgba(255, 0, 110, 0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .touch-action--b {
+    --btn-color: var(--yellow);
+    --btn-glow: rgba(245, 255, 0, 0.4);
+  }
+  /* A un poco más alto que B, como en el panel de un gabinete. */
+  .touch-pad--below .touch-action--b + .touch-action--a {
+    margin-bottom: 22px;
+  }
+  .touch-round {
+    width: var(--round);
+    height: var(--round);
+    border-radius: 50%;
+    font-family: var(--pixel);
+    font-size: 14px;
+    color: var(--btn-color);
+    background: radial-gradient(circle at 50% 38%, #24242e, var(--plastic) 70%);
+    border: 2px solid var(--btn-color);
+    box-shadow:
+      0 5px 0 #0a0a0f,
+      0 0 14px var(--btn-glow);
+  }
+  .touch-round.is-pressed {
+    transform: translateY(4px);
+    color: #0a0a0f;
+    background: var(--btn-color);
+    box-shadow:
+      0 1px 0 #0a0a0f,
+      0 0 24px var(--btn-color),
+      inset 0 0 10px rgba(0, 0, 0, 0.35);
+  }
+  .touch-action-label {
+    font-family: var(--pixel);
+    font-size: 7px;
+    letter-spacing: 0.16em;
+    color: var(--ink-dim);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .touch-btn,
+    .touch-arrow {
+      transition: none;
+    }
+  }
 }
