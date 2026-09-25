@@ -11,6 +11,7 @@ import AsteroidsCanvas from "./asteroides/AsteroidsCanvas";
 import TetrisCanvas from "./tetris/TetrisCanvas";
 import ArkanoidCanvas from "./arkanoid/ArkanoidCanvas";
 import SnakeCanvas from "./snake/SnakeCanvas";
+import FroggerCanvas from "./frogger/FroggerCanvas";
 import type { SkinId } from "./skins";
 import {
   KEY_DOWN,
@@ -114,6 +115,22 @@ export const gameRegistry: Record<string, GameRegistryEntry> = {
     hasRealLeaderboard: true,
     secondaryStatLabel: "Longitud",
     formatSecondaryStat: formatNumber,
+    skins: ["clasico", "neon", "retro"],
+    touchControls: {
+      buttons: {
+        up: { emit: KEY_UP },
+        down: { emit: KEY_DOWN },
+        left: { emit: KEY_LEFT },
+        right: { emit: KEY_RIGHT },
+      },
+    },
+  },
+  frogger: {
+    Canvas: FroggerCanvas as ComponentType<unknown> as GameCanvasComponent,
+    hasRealLeaderboard: true,
+    secondaryStatLabel: "Vidas",
+    formatSecondaryStat: formatHearts,
+    screenClassName: "crt-screen--frogger",
     skins: ["clasico", "neon", "retro"],
     touchControls: {
       buttons: {

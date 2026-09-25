@@ -20,6 +20,7 @@ Mantenido por el agente `skin-designer`. Skins obligatorias por juego: `clasico`
 | `tetris`     | ✔       | ✔    | ✔     | no          | paleta + sprites cacheados¹ | IMPLEMENTADO | 2026-09-23      |
 | `arkanoid`   | ✔       | ✔    | ✔     | sí          | recoloreo por luminancia²   | IMPLEMENTADO | 2026-09-23      |
 | `snake`      | ✔       | ✔    | ✔     | sí          | paleta + fruta recoloreada³ | IMPLEMENTADO | 2026-09-23      |
+| `frogger`    | ✔       | ✔    | ✔     | no          | paleta (primitivas)         | IMPLEMENTADO | 2026-09-24      |
 
 ¹ En `neon` cada tipo de bloque se prerenderiza con glow en un canvas offscreen (una vez por skin).
 ² Variante de la estrategia (a): cada sprite (bloque por color, 4 frames de explosión, paleta,
@@ -137,6 +138,41 @@ Estados: `IMPLEMENTADO`, `OK` (ya estaba completo), `PENDIENTE` (sin revisar/imp
     Decidida por skin-designer — revisar.
   - Retro reutiliza la paleta Game Boy de tetris. Decidida por skin-designer — revisar.
 
+### frogger
+
+- Archivos tocados: `app/game/frogger/engine.ts` (`FroggerPalette` gana `glow` y `smoothing`;
+  `FROGGER_PALETTES` pasa a `Record<SkinId, …>` con `neon` y `retro`; helpers `glowOn`/`glowOff`;
+  `draw()` resetea `shadowBlur` y aplica `imageSmoothingEnabled`), `app/game/registry.ts`
+  (`skins: ["clasico", "neon", "retro"]`). `FroggerCanvas.tsx` ya pasaba `skin` y llamaba
+  `setSkin`: sin cambios.
+- Auditoría: todo el render es con primitivas y ya leía de la paleta (sin `drawImage`): filas de
+  fondo (HUD, metas, río, zonas seguras, carretera), líneas discontinuas, bocas con borde,
+  coches (3 colores por carril) con ruedas, camiones con cabina, troncos con vetas, tortugas con
+  escamas y contorno translúcido al sumergirse, rana con ojos, texto del HUD en canvas
+  (`bold 16px monospace`), vidas como círculos y barra de tiempo en 3 colores.
+- Paletas (hex principales por skin):
+  - `clasico`: valores originales exactos (`glow: 0`, `smoothing: true`, que son los defaults
+    del contexto: cero regresión).
+  - `neon`: HUD `#05030d` con texto `#00f5ff`; metas `#08200f` con borde `#f5ff00`; río
+    `#050b2a`; zonas seguras `#16062a`; carretera `#05030d` con líneas `#7a1f5c`; coches
+    `#ff006e`/`#f5ff00`/`#00f5ff`; camión `#c026ff` con cabina `#ff8a00`; troncos `#ff8a00`;
+    tortugas `#00f5ff`; rana `#39ff14`; tiempo `#00ff88`/`#f5ff00`/`#ff006e`. `shadowBlur = 12`
+    del mismo tono solo en cuerpos de entidades, bordes de metas y HUD (no en detalles).
+  - `retro`: CGA de 4 tonos `#000000`/`#55ffff`/`#ff55ff`/`#ffffff` — río cian, zonas seguras y
+    fila de metas magenta, carretera negra con líneas cian; troncos magenta, tortugas negras con
+    escamas blancas (sumergidas: contorno blanco sólido), rana blanca con ojos magenta; sin glow,
+    sin transparencias, `imageSmoothingEnabled = false`.
+- `setSkin` solo cambia la paleta: en partida y en pausa el loop sigue dibujando (el cambio se ve
+  al siguiente frame), en game over repinta un frame síncrono sin simular.
+- Decisiones a revisar:
+  - Retro con paleta CGA (cian/magenta) para variar respecto a Game Boy (tetris, snake), fósforo
+    verde (asteroides) y ámbar (arkanoid). Decidida por skin-designer — revisar.
+  - En retro la rana es blanca (no verde) y las tortugas visibles son negras sobre el río cian; la
+    tortuga sumergida se distingue solo por ser contorno. Decidida por skin-designer — revisar.
+  - Las formas redondas (rana, tortugas, ruedas, vidas) siguen siendo arcos con antialias del
+    canvas en retro; no se cambiaron a cuadrados para no alterar siluetas. Decidida por
+    skin-designer — revisar.
+
 ## Historial
 
 - 2026-09-23 — entrada: `tetris` — resultado: infraestructura común creada (skins.ts, registro,
@@ -144,3 +180,5 @@ Estados: `IMPLEMENTADO`, `OK` (ya estaba completo), `PENDIENTE` (sin revisar/imp
 - 2026-09-23 — entrada: `arkanoid, asteroides, snake` — resultado: los tres juegos con
   `clasico`/`neon`/`retro` IMPLEMENTADO (utilidades de recoloreo de sprites añadidas a
   `skins.ts`); `tsc --noEmit`, `eslint` y `npm run build` OK.
+- 2026-09-24 — entrada: `frogger` — resultado: frogger con `clasico`/`neon`/`retro`
+  IMPLEMENTADO (paletas sobre el sistema existente del motor); `npm run build` OK.

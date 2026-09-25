@@ -14,6 +14,7 @@ Este repo sigue spec-driven design: features grandes se definen en `specs/` ante
 
 - `/spec` — diseña una spec nueva sección por sección, hace preguntas de aclaración antes de proponer estructura. Usar antes de empezar una feature grande.
 - `/spec-impl` — implementa una spec ya escrita.
+- `/spec-impl-game` — variante de `/spec-impl` para specs de juegos con motor real (`.claude/skills/spec-impl-game/`, local del repo, no symlink): hereda el flujo completo de `/spec-impl` leyendo su `SKILL.md` y, al terminar el último paso, lanza en secuencia (nunca en paralelo) el agente `skin-designer` y, cuando termina, `mobile-porter`, ambos sobre el id del juego implementado. No hace commits.
 - `/juego-nuevo` — variante especializada de `/spec` precargada con la arquitectura ya fijada para juegos (registro por id + leaderboard real en Supabase). Usar antes de portar un juego de `references/started-games/` o crear uno desde cero; solo produce la spec en `specs/`, no implementa.
 
 Antes de `/juego-nuevo`, cuando aún no está decidido qué juego sigue, usar el agente `game-planner` (`.claude/agents/game-planner.md`). Su memoria son `references/game-ideas.md` (todas las ideas evaluadas, incluidas las descartadas) y `references/game-todo-collections.md` (cola priorizada con briefs listos para `/juego-nuevo`) y `references/game-suggestions-todo.md` (To do con cada sugerencia accionable, ids `S-NNN`): siempre los lee antes de proponer y los actualiza al terminar.
