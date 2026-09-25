@@ -112,15 +112,15 @@ export default function GamePlayerPage() {
     setOver(true);
   }, []);
 
+  // El motor se llama fuera del updater de setPaused: React puede ejecutar
+  // el updater más de una vez (dos en dev) y el motor recibiría llamadas repetidas.
   const togglePause = () => {
-    setPaused((p) => {
-      const next = !p;
-      if (hasEngine) {
-        if (next) engineRef.current?.pause();
-        else engineRef.current?.resume();
-      }
-      return next;
-    });
+    const next = !paused;
+    if (hasEngine) {
+      if (next) engineRef.current?.pause();
+      else engineRef.current?.resume();
+    }
+    setPaused(next);
   };
 
   // Pausa automática al ocultar la pestaña (cambio de app en el teléfono),

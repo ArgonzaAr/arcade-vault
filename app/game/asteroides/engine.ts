@@ -637,6 +637,9 @@ export function createAsteroidsGame(
   }
 
   function startLoop() {
+    // Una sola cadena de rAF: si resume() llega repetido, una segunda cadena
+    // sobreviviría a stopLoop() y el juego seguiría corriendo en pausa.
+    if (animationFrameId !== null) return;
     lastTime = null;
     animationFrameId = requestAnimationFrame(loop);
   }

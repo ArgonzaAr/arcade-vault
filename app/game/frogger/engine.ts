@@ -2,7 +2,7 @@
 // Sin referencia en references/started-games/ ni sprites: todo se dibuja con
 // primitivas canvas (ver specs/game-jam/frogger/01-frogger-core.md).
 
-import { DEFAULT_SKIN, type SkinId } from "../skins";
+import { DEFAULT_SKIN, withGlow, type SkinId } from "../skins";
 
 export interface FroggerStats {
   score: number;
@@ -15,9 +15,13 @@ export interface FroggerCallbacks {
   onGameOver: (finalScore: number) => void;
 }
 
+export interface FroggerOptions {
+  showFps?: boolean; // dibuja el contador de FPS (lo activa ?fps=1)
+}
+
 export interface FroggerGame {
   start: () => void;
-  // Congela la simulación; el dibujo sigue corriendo.
+  // Congela la simulación y detiene el loop (pinta un último frame).
   pause: () => void;
   resume: () => void;
   restart: () => void;
@@ -53,6 +57,9 @@ const POINTS_PER_ROW = 10;
 const POINTS_PER_GOAL = 50;
 const POINTS_PER_SECOND_LEFT = 10;
 const POINTS_PER_ROUND = 200;
+const STEP_MS = 1000 / 120; // paso fijo de simulación
+const MAX_STEPS_PER_FRAME = 12; // ~100 ms; el tiempo que sobra se descarta
+const FPS_SAMPLE_MS = 500; // ventana del promedio del contador de FPS
 
 // ===== Paletas por skin (solo visuales) =====
 interface FroggerPalette {
@@ -207,6 +214,15 @@ interface Lane {
   speed: number; // celdas por segundo (ya escalada por nivel)
   dir: 1 | -1;
   entities: Entity[];
+  // Clave del sprite de sus entidades ("car:N", "truck:W:D", "log:W"); se arma
+  // una vez en buildLanes. Las tortugas usan "turtle:up" / "turtle:down".
+  spriteKey: string;
+  carIndex: number; // n.º de carril de coches (color de la paleta); -1 si no es de coches
+}
+
+interface SpriteEntry {
+  sprite: HTMLCanvasElement;
+  pad: number; // margen del glow horneado (0 sin glow)
 }
 
 interface Frog {
@@ -253,9 +269,28 @@ const LANE_CONFIGS: LaneConfig[] = [
 
 const TURTLE_CYCLE_MS = TURTLE_VISIBLE_MS + TURTLE_SUBMERGED_MS;
 
+// Offsets de las escamas del caparazón, relativos al centro de la tortuga.
+const TURTLE_SCALE_OFFSETS: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [-6, -6],
+  [6, -6],
+  [-6, 6],
+  [6, 6],
+];
+
 function buildLanes(level: number): Lane[] {
   const factor = LEVEL_SPEED_FACTOR ** (level - 1);
+  let carLanes = 0;
   return LANE_CONFIGS.map((cfg) => {
+    const carIndex = cfg.type === "car" ? carLanes++ : -1;
+    const spriteKey =
+      cfg.type === "car"
+        ? `car:${carIndex}`
+        : cfg.type === "truck"
+          ? `truck:${cfg.width}:${cfg.dir}`
+          : cfg.type === "log"
+            ? `log:${cfg.width}`
+            : "turtle";
     const period = (COLS + cfg.width) / cfg.count;
     const entities: Entity[] = [];
     for (let i = 0; i < cfg.count; i++) {
@@ -276,6 +311,8 @@ function buildLanes(level: number): Lane[] {
       speed: ((cfg.pxPerFrame * 60) / CELL) * factor, // px/frame → celdas/s
       dir: cfg.dir,
       entities,
+      spriteKey,
+      carIndex,
     };
   });
 }
@@ -283,13 +320,16 @@ function buildLanes(level: number): Lane[] {
 export function createFroggerGame(
   canvas: HTMLCanvasElement,
   callbacks: FroggerCallbacks,
-  skin: SkinId = DEFAULT_SKIN
+  skin: SkinId = DEFAULT_SKIN,
+  options: FroggerOptions = {}
 ): FroggerGame {
-  const ctx = canvas.getContext("2d")!;
+  // Tablero opaco: el navegador puede saltarse la composición con transparencia.
+  const ctx = canvas.getContext("2d", { alpha: false })!;
   let activeSkin = skin;
   let palette = paletteFor(skin);
 
   let lanes: Lane[] = [];
+  const laneByRow: (Lane | undefined)[] = []; // índice por fila, se rehace con setLanes
   let frog: Frog = newFrog();
   let pendingDir: Direction | null = null;
   let goals: boolean[] = GOAL_COLS.map(() => false);
@@ -348,8 +388,15 @@ export function createFroggerGame(
     timeLeft = roundTime(level);
   }
 
+  // Reemplaza los carriles y rehace el índice por fila.
+  function setLanes(next: Lane[]) {
+    lanes = next;
+    laneByRow.length = 0;
+    for (const lane of lanes) laneByRow[lane.row] = lane;
+  }
+
   function laneAt(row: number): Lane | undefined {
-    return lanes.find((lane) => lane.row === row);
+    return laneByRow[row];
   }
 
   // Vehículo que se solapa con la rana en su carril. El margen evita muertes
@@ -398,7 +445,7 @@ export function createFroggerGame(
     score += POINTS_PER_ROUND;
     goals = GOAL_COLS.map(() => false);
     level++;
-    lanes = buildLanes(level);
+    setLanes(buildLanes(level));
     respawnFrog(); // rana al inicio y temporizador con roundTime(level)
   }
 
@@ -495,23 +542,53 @@ export function createFroggerGame(
   }
 
   // ===== Dibujo =====
-  // Glow de la skin activa (solo neon); con glow 0 no toca el contexto.
-  function glowOn(color: string) {
-    if (palette.glow <= 0) return;
-    ctx.shadowBlur = palette.glow;
-    ctx.shadowColor = color;
+  // Caché de sprites offscreen de la skin activa; se vacía en setSkin.
+  // Claves "<tipo>:<variante>", p. ej. "car:0", "truck:3:1", "turtle:up".
+  // Guarda la entrada completa para que getSprite no asigne memoria por frame.
+  const spriteCache = new Map<string, SpriteEntry>();
+
+  // Sprite de w × h pintado una sola vez con `paint` (coordenadas locales desde
+  // 0,0). Con glow en la skin, se hornea con withGlow y el sprite gana un margen
+  // `pad` a cada lado: se dibuja en (x - pad, y - pad). `glowColor` null: sin
+  // glow en ninguna skin (p. ej. el contorno de la tortuga sumergida).
+  function getSprite(
+    key: string,
+    w: number,
+    h: number,
+    glowColor: string | null,
+    paint: (sctx: CanvasRenderingContext2D) => void
+  ): SpriteEntry {
+    let entry = spriteCache.get(key);
+    if (!entry) {
+      let sprite = document.createElement("canvas");
+      sprite.width = w;
+      sprite.height = h;
+      paint(sprite.getContext("2d")!);
+      let pad = 0;
+      if (palette.glow > 0 && glowColor !== null) {
+        sprite = withGlow(sprite, palette.glow, glowColor);
+        pad = palette.glow * 2;
+      }
+      entry = { sprite, pad };
+      spriteCache.set(key, entry);
+    }
+    return entry;
   }
 
-  function glowOff() {
-    if (palette.glow > 0) ctx.shadowBlur = 0;
-  }
+  // Capa de fondo estático de la skin activa (zonas, líneas discontinuas y
+  // bocas vacías con su borde); se construye una vez y se invalida en setSkin.
+  let backgroundLayer: HTMLCanvasElement | null = null;
 
-  function fillRow(row: number, color: string) {
-    ctx.fillStyle = color;
-    ctx.fillRect(0, row * CELL, CANVAS_W, CELL);
-  }
+  function buildBackgroundLayer(): HTMLCanvasElement {
+    const layer = document.createElement("canvas");
+    layer.width = CANVAS_W;
+    layer.height = CANVAS_H;
+    const b = layer.getContext("2d")!;
 
-  function drawBackground() {
+    const fillRow = (row: number, color: string) => {
+      b.fillStyle = color;
+      b.fillRect(0, row * CELL, CANVAS_W, CELL);
+    };
     fillRow(ROW_HUD, palette.hudBg);
     fillRow(ROW_GOALS, palette.goalRow);
     for (let row = ROW_RIVER_TOP; row <= ROW_RIVER_BOT; row++) {
@@ -524,155 +601,208 @@ export function createFroggerGame(
     fillRow(ROW_START, palette.safe);
 
     // Líneas discontinuas entre carriles de carretera.
-    ctx.strokeStyle = palette.roadLine;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([16, 12]);
+    b.strokeStyle = palette.roadLine;
+    b.lineWidth = 2;
+    b.setLineDash([16, 12]);
     for (let row = ROW_ROAD_TOP + 1; row <= ROW_ROAD_BOT; row++) {
-      ctx.beginPath();
-      ctx.moveTo(0, row * CELL);
-      ctx.lineTo(CANVAS_W, row * CELL);
-      ctx.stroke();
+      b.beginPath();
+      b.moveTo(0, row * CELL);
+      b.lineTo(CANVAS_W, row * CELL);
+      b.stroke();
     }
-    ctx.setLineDash([]);
+    b.setLineDash([]);
+
+    // Bocas vacías; el borde lleva glow en neon (horneado una sola vez).
+    const y = ROW_GOALS * CELL;
+    for (const col of GOAL_COLS) {
+      const x = col * CELL;
+      b.fillStyle = palette.goalSlot;
+      b.fillRect(x + 2, y + 2, CELL * 2 - 4, CELL - 4);
+      b.strokeStyle = palette.goalBorder;
+      b.lineWidth = 2;
+      if (palette.glow > 0) {
+        b.shadowBlur = palette.glow;
+        b.shadowColor = palette.goalBorder;
+      }
+      b.strokeRect(x + 2, y + 2, CELL * 2 - 4, CELL - 4);
+      b.shadowBlur = 0;
+    }
+    return layer;
   }
 
-  function drawFrogShape(cx: number, cy: number, scale: number, legs: boolean) {
+  // Rana centrada en un sprite de CELL × CELL; con patas extendidas ocupa
+  // exactamente el ancho de la celda. El glow lo añade getSprite.
+  function paintFrog(
+    s: CanvasRenderingContext2D,
+    scale: number,
+    legs: boolean
+  ) {
+    const cx = CELL / 2;
+    const cy = CELL / 2;
     const rx = 14 * scale;
     const ry = 12 * scale;
-    ctx.fillStyle = palette.frog;
-    glowOn(palette.frog);
+    s.fillStyle = palette.frog;
     if (legs) {
       // Patas extendidas durante el salto.
-      ctx.fillRect(cx - rx - 6 * scale, cy - ry, 6 * scale, 4 * scale);
-      ctx.fillRect(cx + rx, cy - ry, 6 * scale, 4 * scale);
-      ctx.fillRect(
+      s.fillRect(cx - rx - 6 * scale, cy - ry, 6 * scale, 4 * scale);
+      s.fillRect(cx + rx, cy - ry, 6 * scale, 4 * scale);
+      s.fillRect(
         cx - rx - 6 * scale,
         cy + ry - 4 * scale,
         6 * scale,
         4 * scale
       );
-      ctx.fillRect(cx + rx, cy + ry - 4 * scale, 6 * scale, 4 * scale);
+      s.fillRect(cx + rx, cy + ry - 4 * scale, 6 * scale, 4 * scale);
     }
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
-    glowOff();
+    s.beginPath();
+    s.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    s.fill();
     for (const side of [-1, 1]) {
       const ex = cx + side * 6 * scale;
       const ey = cy - 7 * scale;
-      ctx.fillStyle = palette.frogEyeWhite;
-      ctx.beginPath();
-      ctx.arc(ex, ey, 4 * scale, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = palette.frogEyePupil;
-      ctx.beginPath();
-      ctx.arc(ex, ey, 2 * scale, 0, Math.PI * 2);
-      ctx.fill();
+      s.fillStyle = palette.frogEyeWhite;
+      s.beginPath();
+      s.arc(ex, ey, 4 * scale, 0, Math.PI * 2);
+      s.fill();
+      s.fillStyle = palette.frogEyePupil;
+      s.beginPath();
+      s.arc(ex, ey, 2 * scale, 0, Math.PI * 2);
+      s.fill();
     }
   }
 
+  // "frog:idle" (en reposo), "frog:hop" (patas extendidas) y "frog:goal"
+  // (escala 0.8, rana en boca ocupada).
+  function frogSprite(
+    key: "frog:idle" | "frog:hop" | "frog:goal"
+  ): SpriteEntry {
+    return (
+      spriteCache.get(key) ??
+      getSprite(key, CELL, CELL, palette.frog, (s) =>
+        paintFrog(s, key === "frog:goal" ? 0.8 : 1, key === "frog:hop")
+      )
+    );
+  }
+
+  // Solo las ranas de las bocas ocupadas; las bocas vacías están en el fondo.
   function drawGoals() {
-    GOAL_COLS.forEach((col, i) => {
-      const x = col * CELL;
-      const y = ROW_GOALS * CELL;
-      ctx.fillStyle = palette.goalSlot;
-      ctx.fillRect(x + 2, y + 2, CELL * 2 - 4, CELL - 4);
-      ctx.strokeStyle = palette.goalBorder;
-      ctx.lineWidth = 2;
-      glowOn(palette.goalBorder);
-      ctx.strokeRect(x + 2, y + 2, CELL * 2 - 4, CELL - 4);
-      glowOff();
-      if (goals[i]) drawFrogShape(x + CELL, y + CELL / 2, 0.8, false);
-    });
+    const y = ROW_GOALS * CELL;
+    for (let i = 0; i < GOAL_COLS.length; i++) {
+      if (!goals[i]) continue;
+      // Rana centrada en la boca (x + CELL, y + CELL / 2).
+      const { sprite, pad } = frogSprite("frog:goal");
+      ctx.drawImage(sprite, GOAL_COLS[i] * CELL + CELL / 2 - pad, y - pad);
+    }
   }
 
-  function drawCar(x: number, y: number, w: number, color: string) {
-    ctx.fillStyle = palette.wheel;
-    for (const wx of [x + 8, x + w - 8]) {
-      for (const wy of [y + 8, y + CELL - 8]) {
-        ctx.beginPath();
-        ctx.arc(wx, wy, 5, 0, Math.PI * 2);
-        ctx.fill();
+  // Pintores de sprites: dibujan una sola vez, en coordenadas locales del
+  // sprite (0,0 = esquina superior izquierda de la entidad). El glow lo añade
+  // getSprite con withGlow, no el pintor.
+  function paintCar(s: CanvasRenderingContext2D, w: number, color: string) {
+    s.fillStyle = palette.wheel;
+    for (const wx of [8, w - 8]) {
+      for (const wy of [8, CELL - 8]) {
+        s.beginPath();
+        s.arc(wx, wy, 5, 0, Math.PI * 2);
+        s.fill();
       }
     }
-    ctx.fillStyle = color;
-    glowOn(color);
-    ctx.fillRect(x + 3, y + 8, w - 6, CELL - 16);
-    glowOff();
+    s.fillStyle = color;
+    s.fillRect(3, 8, w - 6, CELL - 16);
   }
 
-  function drawTruck(x: number, y: number, w: number, dir: 1 | -1) {
-    ctx.fillStyle = palette.truck;
-    glowOn(palette.truck);
-    ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
-    glowOff();
+  function paintTruck(s: CanvasRenderingContext2D, w: number, dir: 1 | -1) {
+    s.fillStyle = palette.truck;
+    s.fillRect(2, 6, w - 4, CELL - 12);
     // Cabina en el frente, según el sentido de marcha.
-    ctx.fillStyle = palette.truckCab;
-    const cabX = dir === 1 ? x + w - 2 - CELL * 0.6 : x + 2;
-    ctx.fillRect(cabX, y + 4, CELL * 0.6, CELL - 8);
+    s.fillStyle = palette.truckCab;
+    const cabX = dir === 1 ? w - 2 - CELL * 0.6 : 2;
+    s.fillRect(cabX, 4, CELL * 0.6, CELL - 8);
   }
 
-  function drawLog(x: number, y: number, w: number) {
-    ctx.fillStyle = palette.log;
-    glowOn(palette.log);
-    ctx.fillRect(x + 1, y + 6, w - 2, CELL - 12);
-    glowOff();
-    ctx.strokeStyle = palette.logLine;
-    ctx.lineWidth = 2;
-    for (const ly of [y + 14, y + 26]) {
-      ctx.beginPath();
-      ctx.moveTo(x + 8, ly);
-      ctx.lineTo(x + w - 8, ly);
-      ctx.stroke();
+  function paintLog(s: CanvasRenderingContext2D, w: number) {
+    s.fillStyle = palette.log;
+    s.fillRect(1, 6, w - 2, CELL - 12);
+    s.strokeStyle = palette.logLine;
+    s.lineWidth = 2;
+    for (const ly of [14, 26]) {
+      s.beginPath();
+      s.moveTo(8, ly);
+      s.lineTo(w - 8, ly);
+      s.stroke();
     }
   }
 
-  function drawTurtles(x: number, y: number, entity: Entity) {
-    for (let i = 0; i < entity.width; i++) {
-      const cx = x + i * CELL + CELL / 2;
-      const cy = y + CELL / 2;
-      if (entity.submerged) {
-        ctx.strokeStyle = palette.turtleSubmerged;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 15, 0, Math.PI * 2);
-        ctx.stroke();
-        continue;
-      }
-      ctx.fillStyle = palette.turtle;
-      glowOn(palette.turtle);
-      ctx.beginPath();
-      ctx.arc(cx, cy, 15, 0, Math.PI * 2);
-      ctx.fill();
-      glowOff();
-      ctx.fillStyle = palette.turtleScale;
-      for (const [dx, dy] of [
-        [0, 0],
-        [-6, -6],
-        [6, -6],
-        [-6, 6],
-        [6, 6],
-      ]) {
-        ctx.beginPath();
-        ctx.arc(cx + dx, cy + dy, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
+  // Una tortuga (una celda); los grupos repiten el sprite `width` veces.
+  function paintTurtle(s: CanvasRenderingContext2D, submerged: boolean) {
+    const c = CELL / 2;
+    if (submerged) {
+      s.strokeStyle = palette.turtleSubmerged;
+      s.lineWidth = 2;
+      s.beginPath();
+      s.arc(c, c, 15, 0, Math.PI * 2);
+      s.stroke();
+      return;
+    }
+    s.fillStyle = palette.turtle;
+    s.beginPath();
+    s.arc(c, c, 15, 0, Math.PI * 2);
+    s.fill();
+    s.fillStyle = palette.turtleScale;
+    for (const [dx, dy] of TURTLE_SCALE_OFFSETS) {
+      s.beginPath();
+      s.arc(c + dx, c + dy, 3, 0, Math.PI * 2);
+      s.fill();
     }
   }
 
+  // El pintor (closure) solo se crea si el sprite no está en caché.
+  function laneSprite(lane: Lane): SpriteEntry {
+    const cached = spriteCache.get(lane.spriteKey);
+    if (cached) return cached;
+    const w = lane.entities[0].width * CELL;
+    if (lane.entities[0].type === "car") {
+      const color = palette.cars[lane.carIndex % palette.cars.length];
+      return getSprite(lane.spriteKey, w, CELL, color, (s) =>
+        paintCar(s, w, color)
+      );
+    }
+    if (lane.entities[0].type === "truck") {
+      return getSprite(lane.spriteKey, w, CELL, palette.truck, (s) =>
+        paintTruck(s, w, lane.dir)
+      );
+    }
+    return getSprite(lane.spriteKey, w, CELL, palette.log, (s) =>
+      paintLog(s, w)
+    );
+  }
+
+  function turtleSprite(submerged: boolean): SpriteEntry {
+    const key = submerged ? "turtle:down" : "turtle:up";
+    return (
+      spriteCache.get(key) ??
+      // La tortuga sumergida es solo un contorno sin glow.
+      getSprite(key, CELL, CELL, submerged ? null : palette.turtle, (s) =>
+        paintTurtle(s, submerged)
+      )
+    );
+  }
+
+  // Por frame solo hay drawImage en (x - pad, y - pad), con x entero.
   function drawLanes() {
-    let carLane = 0;
     for (const lane of lanes) {
       const y = lane.row * CELL;
-      const carColor = palette.cars[carLane % palette.cars.length];
-      if (lane.entities[0]?.type === "car") carLane++;
       for (const entity of lane.entities) {
-        const x = entity.col * CELL;
-        const w = entity.width * CELL;
-        if (entity.type === "car") drawCar(x, y, w, carColor);
-        else if (entity.type === "truck") drawTruck(x, y, w, lane.dir);
-        else if (entity.type === "log") drawLog(x, y, w);
-        else drawTurtles(x, y, entity);
+        const x = Math.round(entity.col * CELL); // píxel entero (retro sin suavizado)
+        if (entity.type === "turtle") {
+          const { sprite, pad } = turtleSprite(entity.submerged === true);
+          for (let i = 0; i < entity.width; i++) {
+            ctx.drawImage(sprite, x + i * CELL - pad, y - pad);
+          }
+        } else {
+          const { sprite, pad } = laneSprite(lane);
+          ctx.drawImage(sprite, x - pad, y - pad);
+        }
       }
     }
   }
@@ -685,67 +815,179 @@ export function createFroggerGame(
       col += (frog.targetCol - frog.col) * t;
       row += (frog.targetRow - frog.row) * t;
     }
-    drawFrogShape(
-      col * CELL + CELL / 2,
-      row * CELL + CELL / 2,
-      1,
-      frog.animating
+    const { sprite, pad } = frogSprite(
+      frog.animating ? "frog:hop" : "frog:idle"
+    );
+    ctx.drawImage(
+      sprite,
+      Math.round(col * CELL) - pad, // píxel entero (retro sin suavizado)
+      Math.round(row * CELL) - pad
+    );
+  }
+
+  // Capa del HUD (fila 0): puntuación, nivel e iconos de vida. Se redibuja solo
+  // cuando cambian score, level o lives, o la skin (hudLayer = null).
+  let hudLayer: HTMLCanvasElement | null = null;
+  let hudScore = -1;
+  let hudLevel = -1;
+  let hudLives = -1;
+
+  function buildHudLayer(): HTMLCanvasElement {
+    const layer = document.createElement("canvas");
+    layer.width = CANVAS_W;
+    layer.height = CELL;
+    const h = layer.getContext("2d")!;
+    const glow = (color: string) => {
+      if (palette.glow <= 0) return;
+      h.shadowBlur = palette.glow;
+      h.shadowColor = color;
+    };
+
+    h.fillStyle = palette.hudText;
+    glow(palette.hudText);
+    h.font = "bold 16px monospace";
+    h.textBaseline = "top";
+    h.textAlign = "left";
+    h.fillText(String(score).padStart(6, "0"), 8, 6);
+    h.textAlign = "center";
+    h.fillText("NIVEL " + level, CANVAS_W / 2, 6);
+
+    h.fillStyle = palette.lifeIcon;
+    glow(palette.lifeIcon);
+    for (let i = 0; i < lives; i++) {
+      h.beginPath();
+      h.arc(CANVAS_W - 14 - i * 22, 14, 8, 0, Math.PI * 2);
+      h.fill();
+    }
+    return layer;
+  }
+
+  const TIMEBAR_Y = CELL - 10;
+  const TIMEBAR_H = 8;
+
+  // Barra completa (640 × 8) de un color, con glow horneado en neon.
+  function timebarSprite(
+    key: "timebar:high" | "timebar:mid" | "timebar:low",
+    color: string
+  ): SpriteEntry {
+    return (
+      spriteCache.get(key) ??
+      getSprite(key, CANVAS_W, TIMEBAR_H, color, (s) => {
+        s.fillStyle = color;
+        s.fillRect(0, 0, CANVAS_W, TIMEBAR_H);
+      })
     );
   }
 
   function drawHud() {
-    ctx.fillStyle = palette.hudText;
-    glowOn(palette.hudText);
-    ctx.font = "bold 16px monospace";
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.fillText(String(score).padStart(6, "0"), 8, 6);
-    ctx.textAlign = "center";
-    ctx.fillText("NIVEL " + level, CANVAS_W / 2, 6);
-
-    ctx.fillStyle = palette.lifeIcon;
-    glowOn(palette.lifeIcon);
-    for (let i = 0; i < lives; i++) {
-      ctx.beginPath();
-      ctx.arc(CANVAS_W - 14 - i * 22, 14, 8, 0, Math.PI * 2);
-      ctx.fill();
+    if (
+      hudLayer === null ||
+      score !== hudScore ||
+      level !== hudLevel ||
+      lives !== hudLives
+    ) {
+      hudLayer = buildHudLayer();
+      hudScore = score;
+      hudLevel = level;
+      hudLives = lives;
     }
+    ctx.drawImage(hudLayer, 0, 0);
 
-    // Barra de tiempo al pie de la fila del HUD.
+    // Barra de tiempo al pie de la fila del HUD: sprite prehorneado recortado
+    // al ancho proporcional.
     const ratio = Math.max(0, timeLeft / roundTime(level));
-    const timeColor =
+    const barW = Math.round(CANVAS_W * ratio);
+    if (barW <= 0) return;
+    const { sprite, pad } =
       ratio > 0.5
-        ? palette.timeHigh
+        ? timebarSprite("timebar:high", palette.timeHigh)
         : ratio > 0.25
-          ? palette.timeMid
-          : palette.timeLow;
-    ctx.fillStyle = timeColor;
-    glowOn(timeColor);
-    ctx.fillRect(0, CELL - 10, CANVAS_W * ratio, 8);
-    glowOff();
+          ? timebarSprite("timebar:mid", palette.timeMid)
+          : timebarSprite("timebar:low", palette.timeLow);
+    const srcW = pad + barW; // glow izquierdo + tramo visible de la barra
+    const srcH = TIMEBAR_H + pad * 2;
+    ctx.drawImage(sprite, 0, 0, srcW, srcH, -pad, TIMEBAR_Y - pad, srcW, srcH);
+    // Con glow, el recorte deja la barra sin halo en su extremo derecho: se
+    // añade el remate del sprite completo para que se vea como antes.
+    if (pad > 0) {
+      const capX = pad + CANVAS_W;
+      ctx.drawImage(
+        sprite,
+        capX,
+        0,
+        pad,
+        srcH,
+        barW,
+        TIMEBAR_Y - pad,
+        pad,
+        srcH
+      );
+    }
   }
 
+  // Por frame solo hay drawImage: el glow (shadowBlur) está horneado en los
+  // sprites y las capas, y el contexto principal nunca lo activa.
   function draw() {
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-    ctx.shadowBlur = 0; // por si la skin anterior dejaba glow activo
     ctx.imageSmoothingEnabled = palette.smoothing;
-    drawBackground();
+    // Fondo opaco de 640 × 600: cubre todo el canvas, no hace falta clearRect.
+    backgroundLayer ??= buildBackgroundLayer();
+    ctx.drawImage(backgroundLayer, 0, 0);
     drawGoals();
     drawLanes();
     drawFrog();
     drawHud();
+    if (options.showFps) drawFps();
+  }
+
+  // Contador de FPS (?fps=1): promedio de frames en ventanas de FPS_SAMPLE_MS.
+  // Se dibuja fuera de las cachés; la etiqueta solo se rearma al cambiar.
+  let fpsFrames = 0;
+  let fpsWindow = 0; // ms acumulados en la ventana actual
+  let fpsLabel = "FPS --";
+
+  function sampleFps(elapsed: number) {
+    if (elapsed <= 0) return; // primer frame tras (re)arrancar el loop
+    fpsFrames++;
+    fpsWindow += elapsed;
+    if (fpsWindow >= FPS_SAMPLE_MS) {
+      fpsLabel = "FPS " + Math.round((fpsFrames * 1000) / fpsWindow);
+      fpsFrames = 0;
+      fpsWindow = 0;
+    }
+  }
+
+  // Esquina inferior izquierda de la fila de inicio.
+  function drawFps() {
+    ctx.fillStyle = palette.hudText;
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(fpsLabel, 6, CANVAS_H - 4);
   }
 
   let animationFrameId: number | null = null;
   let lastTime: number | null = null;
+  let accumulator = 0; // ms pendientes de simular
 
   function loop(ts: number) {
     if (lastTime === null) lastTime = ts;
-    // Tope al dt para que volver de otra pestaña no teletransporte las entidades.
-    const dt = Math.min(ts - lastTime, 100);
+    const elapsed = ts - lastTime;
     lastTime = ts;
+    if (options.showFps) sampleFps(elapsed);
 
-    if (!paused && !over) update(dt);
+    if (!paused && !over) {
+      // Paso fijo: la simulación es la misma a cualquier tasa de refresco.
+      accumulator += elapsed;
+      let steps = 0;
+      while (accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && !over) {
+        update(STEP_MS);
+        accumulator -= STEP_MS;
+        steps++;
+      }
+      // Tope de pasos: el tiempo sobrante se descarta (evita la espiral en
+      // equipos lentos y el teletransporte al volver de otra pestaña).
+      if (accumulator >= STEP_MS) accumulator = 0;
+    }
     draw();
 
     if (over) {
@@ -758,6 +1000,9 @@ export function createFroggerGame(
   function startLoop() {
     if (animationFrameId !== null) return;
     lastTime = null;
+    accumulator = 0;
+    fpsFrames = 0; // la pausa no cuenta en el promedio
+    fpsWindow = 0;
     animationFrameId = requestAnimationFrame(loop);
   }
 
@@ -778,7 +1023,7 @@ export function createFroggerGame(
   }
 
   function initGame() {
-    lanes = buildLanes(1);
+    setLanes(buildLanes(1));
     goals = GOAL_COLS.map(() => false);
     score = 0;
     lives = START_LIVES;
@@ -799,12 +1044,17 @@ export function createFroggerGame(
       startLoop();
     },
     pause() {
+      if (over) return;
       paused = true;
+      // Loop detenido en pausa: se pinta un frame y no se vuelve a dibujar
+      // hasta resume().
+      stopLoop();
+      draw();
     },
     resume() {
       if (over) return;
       paused = false;
-      lastTime = null;
+      startLoop(); // reinicia lastTime y accumulator: sin salto al reanudar
     },
     restart() {
       stopLoop();
@@ -822,8 +1072,11 @@ export function createFroggerGame(
       if (nextSkin === activeSkin) return;
       activeSkin = nextSkin;
       palette = paletteFor(nextSkin);
-      // En pausa el loop sigue dibujando (el cambio se ve al siguiente frame);
-      // en game over está detenido: repinta un frame sin simular.
+      spriteCache.clear(); // los sprites se rehacen con la skin nueva al usarse
+      backgroundLayer = null; // se reconstruye en el siguiente draw()
+      hudLayer = null; // idem para el HUD
+      // En pausa y en game over el loop está detenido: repinta un frame sin
+      // simular. En partida el cambio se ve en el siguiente frame.
       if (animationFrameId === null) draw();
     },
   };

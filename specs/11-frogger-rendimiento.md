@@ -16,6 +16,13 @@ La auditoría de `app/game/frogger/engine.ts` (2026-09-25) encontró cinco costo
 - En pausa el loop sigue dibujando a la tasa del monitor sin que nada cambie.
 - `drawTurtles` crea arrays en cada frame y `laneAt` recorre los carriles con `find` varias veces por frame.
 
+Durante la implementación apareció además un bug de pausa en los demás juegos (encontrado en Snake, 2026-09-25): la primera PAUSA detiene el juego, pero tras REANUDAR la siguiente PAUSA muestra el overlay y el juego sigue corriendo. Causa:
+
+- `togglePause` de la play-page llamaba a `pause()`/`resume()` dentro del updater de `setPaused`. React ejecuta ese updater dos veces en desarrollo (y puede repetirlo en otros casos), así que el motor recibía `resume()` dos veces.
+- `startLoop()` de `snake`, `asteroides`, `tetris` y `arkanoid` no comprobaba si ya había un loop activo: cada `resume()` abría una cadena de `requestAnimationFrame` nueva y `animationFrameId` solo guardaba la última. `stopLoop()` cancelaba una y la otra seguía corriendo.
+
+Frogger no lo sufría porque su `startLoop()` ya ignora la llamada si el loop está activo.
+
 ## Alcance
 
 **Incluye:**
@@ -30,11 +37,13 @@ La auditoría de `app/game/frogger/engine.ts` (2026-09-25) encontró cinco costo
 - Coordenadas de dibujo redondeadas a píxel entero.
 - Contador de FPS en el canvas, activado con el query param `?fps=1` en `/game/frogger/play`.
 - Verificación manual en Chrome/Edge (incluida CPU 4× throttling), Firefox, Safari iOS y Chrome Android.
+- Corrección del bug de pausa en todos los juegos con motor: `startLoop()` de `snake`, `asteroides`, `tetris` y `arkanoid` ignora la llamada si ya hay un loop activo, y `togglePause` de la play-page llama al motor fuera del updater de `setPaused`.
 
 **Fuera de alcance (para futuras specs):**
 
-- Cambios de rendimiento en `asteroides`, `tetris`, `arkanoid` o `snake`.
-- Cualquier cambio en `app/game/skins.ts`, `app/game/registry.ts`, `app/game/touch.ts`, la play-page común o `app/globals.css`: `withGlow` se reutiliza tal cual.
+- Cambios de rendimiento en `asteroides`, `tetris`, `arkanoid` o `snake` (en esos motores solo cambia la comprobación de `startLoop()` del bug de pausa).
+- Cualquier cambio en `app/game/skins.ts`, `app/game/registry.ts`, `app/game/touch.ts` o `app/globals.css`: `withGlow` se reutiliza tal cual.
+- Cualquier otro cambio en la play-page común (`app/game/[id]/play/page.tsx`) aparte de `togglePause`.
 - Calidad adaptativa: apagar efectos automáticamente si caen los fps.
 - Escalar el backing store del canvas por `devicePixelRatio`: se mantiene en 640 × 600.
 - Tope de velocidad por nivel o cualquier otro cambio de balance o mecánica.
@@ -95,11 +104,12 @@ Claves del caché de sprites: `"<tipo>:<variante>"`, por ejemplo `car:0` (color 
 8. **HUD cacheado.** `hudLayer` de 640 × 40 con score, nivel e iconos de vida, reconstruido solo cuando cambian `score`, `level` o `lives` o la skin. La barra de tiempo usa el sprite `timebar` del color correspondiente (verde/amarillo/rojo), recortado al ancho proporcional con `drawImage(src, 0, 0, w, h, x, y, w, h)`.
 9. **Sin `shadowBlur` por frame.** Eliminar `glowOn`/`glowOff` y el reset de `shadowBlur` de `draw()`. `shadowBlur` solo aparece dentro de `withGlow` y de los constructores de sprites y capas.
 10. **Contador de FPS.** Con `options.showFps`, promediar frames cada `FPS_SAMPLE_MS` y dibujar `FPS <n>` en la esquina inferior izquierda de la fila de inicio, fuera de la caché. `FroggerCanvas.tsx` pasa `showFps` desde `?fps=1`.
+11. **Bug de pausa en los demás juegos.** En `app/game/{snake,asteroides,tetris,arkanoid}/engine.ts`, `startLoop()` empieza con `if (animationFrameId !== null) return;` (una sola cadena de `requestAnimationFrame`). En `app/game/[id]/play/page.tsx`, `togglePause` calcula `next = !paused`, llama a `pause()`/`resume()` del motor y después a `setPaused(next)`, sin efectos dentro del updater. Prueba manual: en los cuatro juegos, PAUSA → REANUDAR → PAUSA varias veces; cada PAUSA congela el juego.
 
 ## Criterios de aceptación
 
 - [ ] `npm run build` completa sin errores de TypeScript ni de ESLint.
-- [ ] Solo cambian `app/game/frogger/engine.ts` y `app/game/frogger/FroggerCanvas.tsx`.
+- [ ] Solo cambian `app/game/frogger/engine.ts`, `app/game/frogger/FroggerCanvas.tsx`, `startLoop()` de `app/game/{snake,asteroides,tetris,arkanoid}/engine.ts` y `togglePause` de `app/game/[id]/play/page.tsx`.
 - [ ] En `engine.ts`, `shadowBlur` no se asigna en ninguna función que corra en cada frame (`draw` y lo que llama por frame). Solo aparece en la construcción de sprites y capas.
 - [ ] `/game/frogger/play?fps=1` muestra el contador de FPS. Sin el parámetro no aparece.
 - [ ] Chrome, escritorio, sin throttling: el contador marca ≥ 58 fps durante 30 s de juego en `clasico`, `neon` y `retro`.
@@ -113,7 +123,8 @@ Claves del caché de sprites: `"<tipo>:<variante>"`, por ejemplo `car:0` (color 
 - [ ] Cambiar de skin en partida, en pausa y tras el game over repinta con la skin nueva; la puntuación, las vidas y el nivel no cambian.
 - [ ] Las tres skins se ven igual que antes de esta spec: mismos colores, formas, glow de `neon` y ausencia de suavizado en `retro` (comparación visual lado a lado con capturas de la rama anterior).
 - [ ] La mecánica no cambia: saltos de 120 ms, colisiones, tortugas 3 s / 1.5 s, puntuación, bocas, rondas y vidas se comportan como en la spec de Frogger core.
-- [ ] Los demás juegos no cambian de comportamiento.
+- [ ] En `snake`, `asteroides`, `tetris` y `arkanoid`, alternar PAUSA → REANUDAR al menos 3 veces seguidas: cada PAUSA congela el juego y cada REANUDAR lo continúa (antes, desde la segunda PAUSA el juego seguía corriendo bajo el overlay).
+- [ ] Aparte de la pausa, los demás juegos no cambian de comportamiento.
 
 ## Decisiones
 
@@ -133,21 +144,25 @@ Claves del caché de sprites: `"<tipo>:<variante>"`, por ejemplo `car:0` (color 
 - **No:** escalar por `devicePixelRatio`. Multiplicaría los píxeles por frame en móviles de alta densidad, lo contrario de esta spec.
 - **Sí:** solo Frogger. `skins.ts` se reutiliza sin cambios. Decisión del usuario.
 - **Sí:** el contador de FPS lo lee `FroggerCanvas.tsx` desde `window.location` y lo pasa como opción, para que el motor no dependa de la URL.
+- **Sí:** corregir en esta spec el bug de pausa de los demás juegos, en los cuatro motores y en la play-page. Decisión del usuario, tras reproducirlo en Snake.
+- **Sí:** doble defensa. La comprobación en `startLoop()` protege a cada motor aunque reciba `resume()` repetido; sacar las llamadas del updater de `setPaused` evita las llamadas repetidas en origen, porque React exige updaters puros y los ejecuta dos veces en desarrollo.
+- **No:** arreglar solo Snake. Asteroides, tetris y arkanoid tienen el mismo `startLoop()` sin comprobar.
 
 ## Riesgos identificados
 
-| Riesgo                                                                                                                                                             | Mitigación                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Los sprites con glow tienen un margen `pad = glow * 2`; mal aplicado, las entidades se ven desplazadas                                                             | Todo `drawImage` de sprite resta el `pad` que devuelve `getSprite`. Criterio de comparación visual lado a lado.  |
-| `retro` usa `imageSmoothingEnabled = false`; un sprite dibujado en coordenadas fraccionarias se vería tembloroso                                                   | Coordenadas redondeadas a entero (paso 3).                                                                       |
-| Las velocidades crecen 15 % por nivel sin tope; en niveles muy altos (≈ 30) una entidad podría avanzar más de 1.7 celdas por paso de 1/120 s y atravesar a la rana | Fuera de alcance: requiere un tope de velocidad, que es un cambio de balance. Se documenta para una spec futura. |
-| Con `MAX_STEPS_PER_FRAME`, un equipo que no llega a ~10 fps ve el juego en cámara lenta                                                                            | Aceptado: por debajo de ese umbral no hay forma de simular en tiempo real sin saltos. La meta mínima es 30 fps.  |
-| Construir los sprites de golpe al cambiar de skin puede causar un frame lento                                                                                      | El caché es perezoso: cada sprite se crea la primera vez que se usa. Son pocos y pequeños.                       |
+| Riesgo                                                                                                                                                             | Mitigación                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Los sprites con glow tienen un margen `pad = glow * 2`; mal aplicado, las entidades se ven desplazadas                                                             | Todo `drawImage` de sprite resta el `pad` que devuelve `getSprite`. Criterio de comparación visual lado a lado.           |
+| `retro` usa `imageSmoothingEnabled = false`; un sprite dibujado en coordenadas fraccionarias se vería tembloroso                                                   | Coordenadas redondeadas a entero (paso 3).                                                                                |
+| Las velocidades crecen 15 % por nivel sin tope; en niveles muy altos (≈ 30) una entidad podría avanzar más de 1.7 celdas por paso de 1/120 s y atravesar a la rana | Fuera de alcance: requiere un tope de velocidad, que es un cambio de balance. Se documenta para una spec futura.          |
+| Con `MAX_STEPS_PER_FRAME`, un equipo que no llega a ~10 fps ve el juego en cámara lenta                                                                            | Aceptado: por debajo de ese umbral no hay forma de simular en tiempo real sin saltos. La meta mínima es 30 fps.           |
+| `togglePause` lee `paused` del render actual en lugar del updater; dos clics antes de un re-render verían el mismo valor                                           | Los clics son eventos discretos: React re-renderiza antes de procesar el siguiente, así que `paused` siempre está al día. |
+| Construir los sprites de golpe al cambiar de skin puede causar un frame lento                                                                                      | El caché es perezoso: cada sprite se crea la primera vez que se usa. Son pocos y pequeños.                                |
 
 ## Qué **no** está en esta spec
 
-- Rendimiento de los demás juegos.
-- Cambios en `skins.ts`, el registro, la play-page común o el CSS.
+- Rendimiento de los demás juegos (solo se corrige su bug de pausa).
+- Cambios en `skins.ts`, el registro o el CSS, y cambios en la play-page común aparte de `togglePause`.
 - Calidad adaptativa.
 - Escalado por `devicePixelRatio`.
 - Tope de velocidad por nivel o cambios de balance.

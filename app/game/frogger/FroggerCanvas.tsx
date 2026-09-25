@@ -15,8 +15,13 @@ const FroggerCanvas = forwardRef<FroggerCanvasHandle, GameCanvasProps>(
       const canvas = canvasRef.current;
       if (!canvas) return;
 
+      // Contador de FPS para medir rendimiento en cualquier dispositivo (spec 11).
+      const showFps =
+        new URLSearchParams(window.location.search).get("fps") === "1";
       // FroggerStats ya tiene la forma de GameStats (score, lives, level).
-      const game = createFroggerGame(canvas, { onStats, onGameOver }, skin);
+      const game = createFroggerGame(canvas, { onStats, onGameOver }, skin, {
+        showFps,
+      });
       gameRef.current = game;
       game.start();
 
