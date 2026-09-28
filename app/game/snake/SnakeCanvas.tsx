@@ -22,13 +22,17 @@ const SnakeCanvas = forwardRef<SnakeCanvasHandle, GameCanvasProps>(
           level: stats.level,
         });
 
+      // Contador de FPS para medir rendimiento en cualquier dispositivo (spec 11).
+      const showFps =
+        new URLSearchParams(window.location.search).get("fps") === "1";
       const game = createSnakeGame(
         canvas,
         {
           onStats: handleStats,
           onGameOver,
         },
-        skin
+        skin,
+        { showFps }
       );
       gameRef.current = game;
       game.start();

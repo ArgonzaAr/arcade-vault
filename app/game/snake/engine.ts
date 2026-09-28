@@ -1,12 +1,7 @@
 // ===== engine.ts — motor de Snake, escrito desde cero =====
 // No hay game.js de referencia (ver specs/09-juego-snake.md, Decisiones tomadas).
 
-import {
-  loadSpritesheet,
-  drawFruit,
-  getSpritesheet,
-  FRUIT_FRAMES,
-} from "./spritesheet";
+import { loadSpritesheet, getSpritesheet, FRUIT_FRAMES } from "./spritesheet";
 import {
   DEFAULT_SKIN,
   rampMapper,
@@ -35,6 +30,10 @@ export interface SnakeGame {
   forceGameOver: () => void;
   // Cambia solo el aspecto; no reinicia ni avanza la simulación.
   setSkin: (skin: SkinId) => void;
+}
+
+export interface SnakeOptions {
+  showFps?: boolean; // dibuja el contador de FPS (lo activa ?fps=1)
 }
 
 // ===== Paletas por skin (solo visuales) =====
@@ -101,6 +100,27 @@ const FRUIT_SPRITE_KEYS = [
   "orange",
   "watermelon",
 ] as const;
+type FruitName = (typeof FRUIT_SPRITE_KEYS)[number];
+// Claves del caché de sprites por fruta, precalculadas: sin strings por frame.
+const FRUIT_CACHE_KEYS: Record<FruitName, string> = {
+  apple: "fruit:apple",
+  cherry: "fruit:cherry",
+  grape: "fruit:grape",
+  strawberry: "fruit:strawberry",
+  orange: "fruit:orange",
+  watermelon: "fruit:watermelon",
+};
+
+// El movimiento de la víbora sigue siendo un paso discreto cada `tickMs`
+// (60-150 ms); el reloj que lo dispara avanza en pasos fijos de STEP_MS.
+const STEP_MS = 1000 / 120; // paso fijo de simulación
+const MAX_STEPS_PER_FRAME = 12; // ~100 ms; el tiempo que sobra se descarta
+const FPS_SAMPLE_MS = 500; // ventana del promedio del contador de FPS
+
+interface SpriteEntry {
+  sprite: HTMLCanvasElement;
+  pad: number; // margen del glow a cada lado; se dibuja en (x - pad, y - pad)
+}
 
 interface Cell {
   col: number;
@@ -141,18 +161,25 @@ const KEY_TO_DIRECTION: Record<string, Direction> = {
 export function createSnakeGame(
   canvas: HTMLCanvasElement,
   callbacks: SnakeCallbacks,
-  skin: SkinId = DEFAULT_SKIN
+  skin: SkinId = DEFAULT_SKIN,
+  options: SnakeOptions = {}
 ): SnakeGame {
-  const ctx = canvas.getContext("2d")!;
+  // Tablero opaco en las tres skins: el navegador omite la composición alfa.
+  const ctx = canvas.getContext("2d", { alpha: false })!;
   let palette = SNAKE_PALETTES[skin] ?? SNAKE_PALETTES[DEFAULT_SKIN];
-  // Sprites precalculados de la skin activa (segmentos con glow, frutas recoloreadas).
-  let spriteCache = new Map<string, HTMLCanvasElement>();
+  // Caché de sprites offscreen de la skin activa; se vacía en setSkin.
+  // Claves "<tipo>:<variante>": "seg:head", "seg:body", "fruit:apple"…
+  const spriteCache = new Map<string, SpriteEntry>();
+  // La escena solo cambia en cada paso de la víbora, al cargar la hoja de
+  // frutas, al cambiar de skin o al rearmar la etiqueta de FPS: el resto de
+  // frames no se redibuja.
+  let needsDraw = true;
 
   let snake: Cell[] = [];
   let currentDirection: Direction = "right";
   let pendingDirection: Direction = "right";
   let fruit: Cell = { col: 0, row: 0 };
-  let fruitSprite: (typeof FRUIT_SPRITE_KEYS)[number] = "apple";
+  let fruitSprite: FruitName = "apple";
   let score = 0;
   let level = 1;
   let tickMs = INITIAL_TICK_MS;
@@ -226,6 +253,7 @@ export function createSnakeGame(
     }
 
     snake.unshift(newHead);
+    needsDraw = true;
 
     if (newHead.col === fruit.col && newHead.row === fruit.row) {
       score += POINTS_PER_FRUIT;
@@ -240,111 +268,186 @@ export function createSnakeGame(
     emitStats();
   }
 
-  function cached(key: string, build: () => HTMLCanvasElement | null) {
-    let sprite = spriteCache.get(key);
-    if (!sprite) {
-      const built = build();
-      if (!built) return null;
-      sprite = built;
-      spriteCache.set(key, sprite);
-    }
-    return sprite;
-  }
-
-  function glowSegment(color: string) {
-    return cached("seg:" + color, () => {
-      const base = document.createElement("canvas");
-      base.width = CELL - 2;
-      base.height = CELL - 2;
-      const bctx = base.getContext("2d")!;
-      bctx.fillStyle = color;
-      bctx.fillRect(0, 0, base.width, base.height);
-      return withGlow(base, palette.glow, color);
-    });
-  }
-
-  function skinnedFruit(name: string) {
-    return cached("fruit:" + name, () => {
-      const sheet = getSpritesheet();
-      const frame = FRUIT_FRAMES[name];
-      if (!sheet || !frame) return null;
-      const args = [sheet, frame.sx, frame.sy, frame.sw, frame.sh] as const;
-      if (palette.fruitRamp) {
-        return recolorSprite(
-          ...args,
-          CELL,
-          CELL,
-          rampMapper(palette.fruitRamp),
-          { smoothing: true, hardAlpha: true }
-        );
+  // Sprite de w × h pintado una sola vez con `paint` (coordenadas locales desde
+  // 0,0). Con glow en la skin, se hornea con withGlow y el sprite gana un margen
+  // `pad` a cada lado: se dibuja en (x - pad, y - pad). `glowColor` null: sin
+  // glow en ninguna skin.
+  function getSprite(
+    key: string,
+    w: number,
+    h: number,
+    glowColor: string | null,
+    paint: (sctx: CanvasRenderingContext2D) => void
+  ): SpriteEntry {
+    let entry = spriteCache.get(key);
+    if (!entry) {
+      let sprite = document.createElement("canvas");
+      sprite.width = w;
+      sprite.height = h;
+      paint(sprite.getContext("2d")!);
+      let pad = 0;
+      if (palette.glow > 0 && glowColor !== null) {
+        sprite = withGlow(sprite, palette.glow, glowColor);
+        pad = palette.glow * 2;
       }
-      const sprite = recolorSprite(...args, CELL, CELL, null, {
-        smoothing: true,
-      });
-      return palette.fruitGlow
-        ? withGlow(sprite, palette.glow, palette.fruitGlow)
-        : sprite;
-    });
+      entry = { sprite, pad };
+      spriteCache.set(key, entry);
+    }
+    return entry;
+  }
+
+  // Pintores de sprites definidos una vez (leen la paleta activa al construir):
+  // getSprite no recibe closures nuevas en cada frame.
+  function paintHead(sctx: CanvasRenderingContext2D) {
+    sctx.fillStyle = palette.head;
+    sctx.fillRect(0, 0, CELL - 2, CELL - 2);
+  }
+
+  function paintBody(sctx: CanvasRenderingContext2D) {
+    sctx.fillStyle = palette.body;
+    sctx.fillRect(0, 0, CELL - 2, CELL - 2);
+    // Cuadro interior (retro); con glow nunca se dibujaba.
+    if (palette.bodyInner && palette.glow === 0) {
+      sctx.fillStyle = palette.bodyInner;
+      sctx.fillRect(6, 6, CELL - 14, CELL - 14);
+    }
+  }
+
+  // Fruta activa escalada a la celda (y recoloreada en retro); solo se llama
+  // con la hoja ya cargada.
+  function paintFruit(sctx: CanvasRenderingContext2D) {
+    const frame = FRUIT_FRAMES[fruitSprite];
+    const scaled = recolorSprite(
+      getSpritesheet()!,
+      frame.sx,
+      frame.sy,
+      frame.sw,
+      frame.sh,
+      CELL,
+      CELL,
+      palette.fruitRamp ? rampMapper(palette.fruitRamp) : null,
+      palette.fruitRamp
+        ? { smoothing: true, hardAlpha: true }
+        : { smoothing: true }
+    );
+    sctx.drawImage(scaled, 0, 0);
   }
 
   function drawSkinnedFruit() {
-    const x = fruit.col * CELL;
-    const y = fruit.row * CELL;
-    if (!palette.fruitGlow && !palette.fruitRamp) {
-      drawFruit(ctx, fruitSprite, x, y, CELL, CELL);
-      return;
-    }
-    const sprite = skinnedFruit(fruitSprite);
-    if (!sprite) return;
-    const pad = (sprite.width - CELL) / 2;
-    ctx.drawImage(sprite, x - pad, y - pad);
+    const entry = getSprite(
+      FRUIT_CACHE_KEYS[fruitSprite],
+      CELL,
+      CELL,
+      palette.fruitGlow,
+      paintFruit
+    );
+    ctx.drawImage(
+      entry.sprite,
+      fruit.col * CELL - entry.pad,
+      fruit.row * CELL - entry.pad
+    );
   }
 
+  // Por frame solo hay drawImage: el glow (shadowBlur) está horneado en los
+  // sprites y el contexto principal nunca lo activa. Coordenadas enteras
+  // (celdas × 20 y pad entero): sin temblor en retro.
   function draw() {
+    needsDraw = false;
     ctx.imageSmoothingEnabled = palette.smoothing;
+    // Fondo de color sólido: un fillRect es más barato que una capa cacheada.
     ctx.fillStyle = palette.background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (spritesReady) drawSkinnedFruit();
 
+    const head = getSprite(
+      "seg:head",
+      CELL - 2,
+      CELL - 2,
+      palette.head,
+      paintHead
+    );
+    const body = getSprite(
+      "seg:body",
+      CELL - 2,
+      CELL - 2,
+      palette.body,
+      paintBody
+    );
     for (let i = 0; i < snake.length; i++) {
       const segment = snake[i];
-      const color = i === 0 ? palette.head : palette.body;
-      const x = segment.col * CELL + 1;
-      const y = segment.row * CELL + 1;
-      if (palette.glow > 0) {
-        const sprite = glowSegment(color);
-        if (sprite) {
-          const pad = palette.glow * 2;
-          ctx.drawImage(sprite, x - pad, y - pad);
-        }
-        continue;
-      }
-      ctx.fillStyle = color;
-      ctx.fillRect(x, y, CELL - 2, CELL - 2);
-      if (i > 0 && palette.bodyInner) {
-        ctx.fillStyle = palette.bodyInner;
-        ctx.fillRect(x + 6, y + 6, CELL - 14, CELL - 14);
-      }
+      const entry = i === 0 ? head : body;
+      ctx.drawImage(
+        entry.sprite,
+        segment.col * CELL + 1 - entry.pad,
+        segment.row * CELL + 1 - entry.pad
+      );
     }
+
+    if (options.showFps) drawFps();
+  }
+
+  // Contador de FPS (?fps=1): promedio de frames en ventanas de FPS_SAMPLE_MS.
+  // Se dibuja fuera de la caché; la etiqueta solo se rearma al cambiar.
+  let fpsFrames = 0;
+  let fpsWindow = 0; // ms acumulados en la ventana actual
+  let fpsLabel = "FPS --";
+
+  function sampleFps(elapsed: number) {
+    if (elapsed <= 0) return; // primer frame tras (re)arrancar el loop
+    fpsFrames++;
+    fpsWindow += elapsed;
+    if (fpsWindow >= FPS_SAMPLE_MS) {
+      fpsLabel = "FPS " + Math.round((fpsFrames * 1000) / fpsWindow);
+      fpsFrames = 0;
+      fpsWindow = 0;
+      needsDraw = true;
+    }
+  }
+
+  // Esquina inferior izquierda del tablero.
+  function drawFps() {
+    ctx.fillStyle = palette.head;
+    ctx.font = "bold 12px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText(fpsLabel, 6, canvas.height - 4);
   }
 
   let animationFrameId: number | null = null;
   let lastTime: number | null = null;
-  let accumulator = 0;
+  let accumulator = 0; // ms pendientes de simular
+  let tickElapsed = 0; // ms simulados desde el último paso de la víbora
+
+  // Un paso fijo de simulación: avanza el reloj del tick y mueve la víbora
+  // cada `tickMs` (el sobrante pasa al siguiente tick, como antes).
+  function update(dt: number) {
+    tickElapsed += dt;
+    while (tickElapsed >= tickMs) {
+      step();
+      tickElapsed -= tickMs;
+      if (over) break;
+    }
+  }
 
   function loop(ts: number) {
     if (lastTime === null) lastTime = ts;
-    const dt = ts - lastTime;
+    const elapsed = ts - lastTime;
     lastTime = ts;
+    if (options.showFps) sampleFps(elapsed);
 
-    accumulator += dt;
-    while (accumulator >= tickMs) {
-      step();
-      accumulator -= tickMs;
-      if (over) break;
+    // Paso fijo: la simulación es la misma a cualquier tasa de refresco.
+    accumulator += elapsed;
+    let steps = 0;
+    while (accumulator >= STEP_MS && steps < MAX_STEPS_PER_FRAME && !over) {
+      update(STEP_MS);
+      accumulator -= STEP_MS;
+      steps++;
     }
-    draw();
+    // Tope de pasos: el tiempo sobrante se descarta (evita la espiral en
+    // equipos lentos y los saltos de varias celdas tras un frame largo).
+    if (accumulator >= STEP_MS) accumulator = 0;
+    if (needsDraw) draw();
 
     if (over) {
       animationFrameId = null;
@@ -359,6 +462,9 @@ export function createSnakeGame(
     if (animationFrameId !== null) return;
     lastTime = null;
     accumulator = 0;
+    tickElapsed = 0; // como antes: el progreso hacia el siguiente paso se reinicia
+    fpsFrames = 0; // la pausa no cuenta en el promedio
+    fpsWindow = 0;
     animationFrameId = requestAnimationFrame(loop);
   }
 
@@ -386,6 +492,7 @@ export function createSnakeGame(
     lastScore = -1;
     lastLength = -1;
     lastLevel = -1;
+    needsDraw = true;
     placeFruit();
     emitStats();
   }
@@ -397,11 +504,16 @@ export function createSnakeGame(
       spritesReady = false;
       loadSpritesheet(() => {
         spritesReady = true;
+        needsDraw = true;
       });
       startLoop();
     },
     pause() {
+      if (over) return;
+      // Loop detenido en pausa: se pinta un frame y no se vuelve a dibujar
+      // hasta resume().
       stopLoop();
+      draw();
     },
     resume() {
       if (over) return;
@@ -423,9 +535,11 @@ export function createSnakeGame(
       const next = SNAKE_PALETTES[nextSkin];
       if (!next || next === palette) return;
       palette = next;
-      spriteCache = new Map();
+      spriteCache.clear(); // los sprites se rehacen con la skin nueva al usarse
       // En pausa o game over el loop está detenido: repinta un frame sin simular.
+      // En partida el cambio se ve en el siguiente frame.
       if (animationFrameId === null && snake.length > 0) draw();
+      else needsDraw = true;
     },
   };
 }
