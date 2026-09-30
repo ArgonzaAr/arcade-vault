@@ -6,55 +6,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proyecto
 
-Arcade Vault: plataforma para jugar online y competir por puntos. Next.js 16.3.3 (App Router) + React 19 + TypeScript strict + Tailwind CSS 4. Todo el código fuente vive en `app/` (sin monorepo). Alias `@/*` → `./*`.
+Arcade Vault: plataforma para jugar online y competir por puntos. Next.js 16.3.3 (App Router) + React 19 + TypeScript strict + Tailwind CSS 4 + Supabase. Todo el código fuente vive en `app/` (sin monorepo). Alias `@/*` → `./*`.
 
 ## Workflow: Spec Driven Design
 
-Este repo sigue spec-driven design: features grandes se definen en `specs/` antes de escribir código.
+Features grandes se definen en `specs/` antes de escribir código.
 
-- `/spec` — diseña una spec nueva sección por sección, hace preguntas de aclaración antes de proponer estructura. Usar antes de empezar una feature grande.
-- `/spec-impl` — implementa una spec ya escrita.
-- `/spec-impl-game` — variante de `/spec-impl` para specs de juegos con motor real (`.claude/skills/spec-impl-game/`, local del repo, no symlink): hereda el flujo completo de `/spec-impl` leyendo su `SKILL.md` y, al terminar el último paso, lanza en secuencia (nunca en paralelo) el agente `skin-designer`, cuando termina `mobile-porter` y, cuando este termina, `game-performance` (en modo encadenado), los tres sobre el id del juego implementado. No hace commits.
-- `/juego-nuevo` — variante especializada de `/spec` precargada con la arquitectura ya fijada para juegos (registro por id + leaderboard real en Supabase). Usar antes de portar un juego de `references/started-games/` o crear uno desde cero; solo produce la spec en `specs/`, no implementa.
+### Skills (`.claude/skills/`)
 
-Antes de `/juego-nuevo`, cuando aún no está decidido qué juego sigue, usar el agente `game-planner` (`.claude/agents/game-planner.md`). Su memoria son `references/game-ideas.md` (todas las ideas evaluadas, incluidas las descartadas) y `references/game-todo-collections.md` (cola priorizada con briefs listos para `/juego-nuevo`) y `references/game-suggestions-todo.md` (To do con cada sugerencia accionable, ids `S-NNN`): siempre los lee antes de proponer y los actualiza al terminar.
+- `/spec` — diseña una spec nueva sección por sección, con preguntas de aclaración.
+- `/spec-impl` — implementa una spec aprobada (rama propia, paso a paso).
+- `/spec-impl-game` — `/spec-impl` para juegos; al terminar lanza en secuencia (nunca en paralelo) `skin-designer`, `mobile-porter` y `game-performance` (modo encadenado). No hace commits.
+- `/juego-nuevo` — `/spec` precargada con la arquitectura de juegos (registro por id + leaderboard Supabase). Solo produce la spec.
+- `/frontend-design` — usar siempre para diseñar interfaces de usuario.
 
-Para especificar un juego pedido, usar el agente `game-jam` (`.claude/agents/game-jam.md`): recibe el juego concreto (o un tema, del que elige un solo juego) y genera de forma automática una única carpeta `specs/game-jam/NN-<slug>/` con al menos `motor.md` e `integracion.md` completas en el formato de las specs 07-09 (más specs extra solo si la complejidad lo justifica), suficientes para la integración completa del juego, más un índice en `specs/game-jam/README.md`. Solo escribe specs (no implementa ni toca `references/`); la spec elegida se promueve después a `specs/NN-juego-<slug>.md` para `/spec-impl`.
+### Agentes (`.claude/agents/`)
 
-Para revisar las skins de los juegos, usar el agente `skin-designer` (`.claude/agents/skin-designer.md`): implementa directamente en el código que cada juego pedido tenga al menos tres skins (`clasico` por defecto, `neon` y `retro`), junto con la infraestructura común (`app/game/skins.ts`, prop `skin` en el registro) y el selector de skin dentro del HUD del reproductor (`.player-hud` en `app/game/[id]/play/page.tsx`). Lleva el estado por juego en `specs/skin-designer/skins-games-design.md` (lo lee al empezar y lo actualiza al terminar). Acepta uno, varios o `todos` los juegos. **Antes de invocarlo, si el usuario no nombró ningún juego, preguntar con `AskUserQuestion` si revisar todos los juegos o uno/varios en específico** (el subagente no puede preguntar; si le llega sin juegos, no modifica nada y devuelve esa misma pregunta). Las specs previas en `specs/skins/` solo le sirven como referencia de diseño.
+- `game-planner` — decide qué juego sigue; memoria en `references/game-*.md`.
+- `game-jam` — genera specs `motor.md` + `integracion.md` en `specs/game-jam/NN-<slug>/`; luego se promueven a `specs/NN-juego-<slug>.md`.
+- `skin-designer` — skins por juego (`clasico`, `neon`, `retro`) + selector en el HUD del reproductor.
+- `mobile-porter` — soporte táctil (spec 10) para **un** juego.
+- `game-performance` — audita/optimiza FPS (patrón spec 11); niveles `auditar` / `optimizar`.
 
-Para hacer jugable en táctil un juego con motor real, usar el agente `mobile-porter` (`.claude/agents/mobile-porter.md`): recibe **un solo** juego y le aplica el contrato de la spec `10-controles-tactiles-movil.md` (gamepad virtual con `KeyboardEvent` sintéticos). Audita cómo lee el teclado el motor, declara `touchControls` en el registro, normaliza la entrada solo si lee `keyCode`/`which`/`isTrusted`, y encaja el canvas en móvil (proporción `--ar-w`/`--ar-h`, escalado como en `TetrisCanvas.tsx`). No toca la infraestructura común de la spec 10: si el juego necesita algo que esta no ofrece, lo deja como propuesta. Lleva el estado en `specs/mobile-porter/touch-games-status.md`. **Antes de invocarlo, si el usuario no nombró un juego (o nombró varios), preguntar con `AskUserQuestion` cuál** (el subagente no puede preguntar; si le llega sin un único juego, no modifica nada y devuelve esa misma pregunta).
-
-Para verificar, medir u optimizar el rendimiento de juegos con motor real, usar el agente `game-performance` (`.claude/agents/game-performance.md`): acepta uno, varios o `todos` los juegos y un nivel opcional (`auditar` solo audita y mide; `optimizar`, por defecto, además implementa). Sigue el patrón de la spec `11-frogger-rendimiento.md` (paso fijo con acumulador, loop detenido en pausa, sprites y capas cacheadas con glow horneado vía `withGlow`, cero `shadowBlur` por frame, contador `?fps=1`) sin cambiar mecánica ni aspecto, mide FPS antes/después con Chrome headless (1× y CPU 4×) y solo escribe en `app/game/<slug>/**`; lo que requiera infraestructura común lo deja como propuesta. Tiene un **modo encadenado** para ejecutarse después de una skill u otro agente (p.ej. tras `mobile-porter` en `/spec-impl-game`): recibe id, spec y rama, audita primero lo que dejaron los pasos previos y no los revierte. Lleva el estado en `specs/game-performance/performance-status.md`. **Antes de invocarlo, si el usuario no nombró ningún juego, preguntar con `AskUserQuestion` si revisar todos o uno/varios en específico** (el subagente no puede preguntar; si le llega sin juegos, no modifica nada y devuelve esa misma pregunta).
-
-Estas tres skills están symlinkeadas en `.claude/skills/` desde `E:\Users\1187574\Documents\skills_offline_claude\fernando-skills-main` (instalación offline; el paquete `Klerith/fernando-skills` vía `npx skills@latest add` falla por red en este entorno — usar el script `scripts/install-to-agent.sh claude` de esa carpeta si hace falta reinstalar).
+Los subagentes no pueden preguntar: si el usuario no nombra juego(s), preguntar antes con `AskUserQuestion` (`mobile-porter` acepta uno solo). Cada agente lleva su estado en `specs/<agente>/`.
 
 ## Juegos con motor real
 
-Cada juego con motor real se registra por id en `app/game/registry.ts` (nunca `if (id === "...")` encadenados en los consumidores). Una entrada define `Canvas`, `hasRealLeaderboard`, el label/formato del stat secundario del HUD (p.ej. vidas como corazones, líneas o longitud como número) y opcionalmente `screenClassName` cuando el tablero no encaja en el 4:3 por defecto. También declara, obligatoriamente, `touchControls` (`app/game/touch.ts`): los botones del gamepad virtual que se muestra en dispositivos táctiles (spec `10-controles-tactiles-movil.md`). El gamepad despacha `KeyboardEvent` sintéticos en `document`, así que los motores deben leer solo `e.key`/`e.code` (nunca `keyCode`/`which` ni `isTrusted`).
+Registro por id en `app/game/registry.ts` (nunca `if (id === "...")` en consumidores). Cada entrada define `Canvas`, `hasRealLeaderboard`, label/formato del stat secundario del HUD, `screenClassName` opcional (si no encaja en 4:3) y `touchControls` obligatorio (`app/game/touch.ts`, spec `10-controles-tactiles-movil.md`). El gamepad virtual despacha `KeyboardEvent` sintéticos: los motores leen solo `e.key`/`e.code` (nunca `keyCode`/`which`/`isTrusted`). Skins en `app/game/skins.ts`.
 
-Juegos portados hasta ahora (motor + leaderboard en Supabase por slug, vía `app/lib/supabase/queries.ts` / `queries.client.ts`):
+Implementados (motor en `app/game/<slug>/`):
 
-- **asteroides** (`app/game/asteroides/`) — spec `05-juego-asteroides.md`, primer juego con motor real y primera integración con Supabase.
-- **tetris** (`app/game/tetris/`) — spec `07-juego-tetris.md`, tablero angosto (`screenClassName: "crt-screen--narrow"`), stat secundario "Líneas".
-- **arkanoid** (`app/game/arkanoid/`) — spec `08-juego-arkanoid.md`.
-- **snake** (`app/game/snake/`) — spec `09-juego-snake.md`, stat secundario "Longitud".
+- **asteroides** — spec `05`, primer motor real e integración Supabase.
+- **tetris** — spec `07`, `screenClassName: "crt-screen--narrow"`, stat "Líneas".
+- **arkanoid** — spec `08`.
+- **snake** — spec `09`, stat "Longitud".
+- **frogger** — specs `specs/game-jam/frogger/` + rendimiento `11-frogger-rendimiento.md`.
 
-y mas...
-(visita: \references\implemented-games.md) cuando necesites ver qué juegos están implementados y cómo implementar nuevos
+Detalle por juego: `references/implemented-games.md`.
 
-El leaderboard general (`06-leaderboard-tabla-juegos.md`) y su patrón de cuatro funciones genéricas por slug (`getGames`, `getTopScores`, `insertScore`) se reutilizan sin cambios para cada juego nuevo — solo se agrega la fila de siembra en una migración de Supabase (`supabase/migrations/`).
+Leaderboard (spec `06`): funciones genéricas por slug `getGames`, `getGameBySlug` (`app/lib/supabase/queries.ts`), `getTopScores`, `insertScore` (`queries.client.ts`). Juego nuevo solo agrega migración de siembra en `supabase/migrations/`.
 
 ## references/templates/
 
-`references/templates/*.jsx` (`app.jsx`, `nav.jsx`, `auth.jsx`, `biblioteca.jsx`, `detalle.jsx`, `reproductor.jsx`, `salon.jsx`, `data.jsx`, `Arcade Vault.html`) son la **spec literal** de las páginas a implementar en `app/` — no son solo inspiración visual. Al construir una página real, seguir su estructura y contenido, adaptándolos al App Router / TypeScript / Tailwind del proyecto.
+`references/templates/*.jsx` (+ `Arcade Vault.html`) son la **spec literal** de las páginas de `app/`: seguir su estructura y contenido, adaptados a App Router / TypeScript / Tailwind.
 
 ## Estado actual
 
-- Sin test framework configurado — no asumir que existe `npm test` funcional.
-- Sin CI (`.github/workflows` no existe).
-- Prettier configurado (`.prettierrc`, `.prettierignore`), integrado con ESLint vía `eslint-config-prettier` (flat config en `eslint.config.mjs`). Cada Write/Edit dispara un hook `PostToolUse` (`.claude/settings.json`) que corre `prettier --write` y, en archivos JS/TS, `eslint --fix` automáticamente sobre el archivo tocado.
-
-##Skills
-
-Usa siempre /frontend-design para diseñar interfaces de usuarios.
+- Sin test framework (no asumir `npm test`). Sin CI.
+- Prettier + ESLint (`eslint-config-prettier`, flat config). Hook `PostToolUse` (`.claude/hooks/format-on-write.js`) corre `prettier --write` y `eslint --fix` sobre cada archivo tocado por Write/Edit.

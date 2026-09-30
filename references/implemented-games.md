@@ -1,6 +1,6 @@
 # Juegos implementados
 
-Datos extraídos de Supabase (tablas `games` y `scores`) el 2026-09-17.
+Datos extraídos de Supabase (tablas `games` y `scores`) el 2026-09-28.
 
 ## ASTEROIDES
 
@@ -54,6 +54,19 @@ Datos extraídos de Supabase (tablas `games` y `scores`) el 2026-09-17.
 - **Puntajes registrados**: 1 (mejor: 240)
 - **Creado**: 2026-09-15
 
+## FROGGER
+
+- **Slug**: `frogger`
+- **Categoría**: ARCADE
+- **Color**: green
+- **Descripción corta**: Cruza la carretera y el río sin convertirte en papilla.
+- **Descripción larga**: Guía a tu rana a través de una carretera repleta de coches y un río de troncos y tortugas flotantes. Llena las cinco bocas del otro lado para completar la ronda; cada nivel acelera el tráfico y acorta el tiempo. Tres vidas y mucho asfalto por delante.
+- **Motor real**: sí (`app/game/frogger/`), pantalla propia (`screenClassName: "crt-screen--frogger"`).
+- **Spec**: `specs/game-jam/frogger/` (motor + integración) y `specs/11-frogger-rendimiento.md`
+- **Stat secundario del HUD**: Vidas (corazones)
+- **Puntajes registrados**: 1 (mejor: 410)
+- **Creado**: 2026-09-25
+
 ---
 
-Todos los juegos usan el patrón genérico de cuatro funciones por slug (`getGames`, `getTopScores`, `insertScore`) definido en `app/lib/supabase/queries.ts` / `queries.client.ts`, y están registrados en `app/game/registry.ts`.
+Todos los juegos usan el patrón genérico de cuatro funciones por slug (`getGames`, `getGameBySlug` en `app/lib/supabase/queries.ts`; `getTopScores`, `insertScore` en `queries.client.ts`), y están registrados en `app/game/registry.ts` con `touchControls` y skins `clasico`/`neon`/`retro`.
