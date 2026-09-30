@@ -18,10 +18,7 @@ import {
 } from "@/app/game/skins";
 import TouchGamepad from "@/app/game/TouchGamepad";
 import { useIsTouchDevice } from "@/app/game/useIsTouchDevice";
-
-interface StoredUser {
-  name: string;
-}
+import { useAuth } from "@/app/lib/auth/AuthProvider";
 
 export default function GamePlayerPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,13 +30,15 @@ export default function GamePlayerPage() {
   const hasEngine = Boolean(entry);
   const engineRef = useRef<GameEngineHandle>(null);
 
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const { profile } = useAuth();
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [level, setLevel] = useState(1);
   const [paused, setPaused] = useState(false);
   const [over, setOver] = useState(false);
-  const [name, setName] = useState("INVITADO");
+  const [guestName, setGuestName] = useState("INVITADO");
+  // Con sesión el nombre es el username y no se edita; los invitados escriben el suyo.
+  const name = profile ? profile.username.toUpperCase() : guestName;
   const [saved, setSaved] = useState(false);
   const [skin, setSkin] = useState<SkinId>(DEFAULT_SKIN);
   const skinKey = "av_skin_" + game.id;
@@ -57,15 +56,6 @@ export default function GamePlayerPage() {
     sync();
     mql.addEventListener("change", sync);
     return () => mql.removeEventListener("change", sync);
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("av_user");
-      const stored: StoredUser | null = raw ? JSON.parse(raw) : null;
-      setUser(stored);
-      if (stored) setName(stored.name);
-    } catch {}
   }, []);
 
   // Skin recordada por juego; solo se aplica si este juego la ofrece.
@@ -310,8 +300,9 @@ export default function GamePlayerPage() {
               <div className="input-row">
                 <input
                   value={name}
+                  readOnly={Boolean(profile)}
                   onChange={(e) =>
-                    setName(e.target.value.toUpperCase().slice(0, 10))
+                    setGuestName(e.target.value.toUpperCase().slice(0, 10))
                   }
                   placeholder="TUS INICIALES"
                 />

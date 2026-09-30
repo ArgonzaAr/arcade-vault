@@ -1,27 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-
-interface StoredUser {
-  name: string;
-}
+import { useAuth } from "@/app/lib/auth/AuthProvider";
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const { user, profile, loading, signOut } = useAuth();
+  const displayName = profile?.username.toUpperCase() ?? "CUENTA";
 
-  useEffect(() => {
-    const raw = localStorage.getItem("av_user");
-    setUser(raw ? JSON.parse(raw) : null);
-  }, [pathname]);
-
-  const isActive = (name: "home" | "biblioteca" | "salon" | "about" | "auth") => {
+  const isActive = (
+    name: "home" | "biblioteca" | "salon" | "about" | "auth"
+  ) => {
     if (name === "home") return pathname === "/";
-    if (name === "biblioteca") return pathname === "/biblioteca" || pathname.startsWith("/game/");
+    if (name === "biblioteca")
+      return pathname === "/biblioteca" || pathname.startsWith("/game/");
     if (name === "salon") return pathname === "/hall-of-fame";
     if (name === "about") return pathname === "/about";
     if (name === "auth") return pathname === "/auth";
@@ -33,9 +29,8 @@ export default function Nav() {
     router.push(href);
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem("av_user");
-    setUser(null);
+  const handleSignOut = async () => {
+    await signOut();
     go("/");
   };
 
@@ -52,10 +47,16 @@ export default function Nav() {
           <Link href="/" className={isActive("home") ? "active" : ""}>
             Inicio
           </Link>
-          <Link href="/biblioteca" className={isActive("biblioteca") ? "active" : ""}>
+          <Link
+            href="/biblioteca"
+            className={isActive("biblioteca") ? "active" : ""}
+          >
             Biblioteca
           </Link>
-          <Link href="/hall-of-fame" className={isActive("salon") ? "active" : ""}>
+          <Link
+            href="/hall-of-fame"
+            className={isActive("salon") ? "active" : ""}
+          >
             Salón de la Fama
           </Link>
           <Link href="/about" className={isActive("about") ? "active" : ""}>
@@ -67,16 +68,21 @@ export default function Nav() {
           <span className="coin"></span>
           <span>CRÉDITOS · 03</span>
         </div>
-        {user ? (
+        {/* Mientras se resuelve la sesión no se muestra ni usuario ni ENTRAR. */}
+        {loading ? null : user ? (
           <button className="btn ghost auth-btn" onClick={handleSignOut}>
-            {user.name} ▾
+            {displayName} ▾
           </button>
         ) : (
           <button className="btn auth-btn" onClick={() => go("/auth")}>
             Iniciar Sesión
           </button>
         )}
-        <button className="btn ghost hamburger" onClick={() => setOpen(true)} aria-label="Menú">
+        <button
+          className="btn ghost hamburger"
+          onClick={() => setOpen(true)}
+          aria-label="Menú"
+        >
           ≡
         </button>
       </nav>
@@ -86,13 +92,24 @@ export default function Nav() {
         onClick={() => setOpen(false)}
       ></div>
       <aside className={"av-mobile-panel" + (open ? " open" : "")}>
-        <div className="pixel neon-cyan" style={{ fontSize: 11, marginBottom: 16 }}>
+        <div
+          className="pixel neon-cyan"
+          style={{ fontSize: 11, marginBottom: 16 }}
+        >
           MENÚ
         </div>
-        <Link href="/" className={isActive("home") ? "active" : ""} onClick={() => setOpen(false)}>
+        <Link
+          href="/"
+          className={isActive("home") ? "active" : ""}
+          onClick={() => setOpen(false)}
+        >
           Inicio
         </Link>
-        <Link href="/biblioteca" className={isActive("biblioteca") ? "active" : ""} onClick={() => setOpen(false)}>
+        <Link
+          href="/biblioteca"
+          className={isActive("biblioteca") ? "active" : ""}
+          onClick={() => setOpen(false)}
+        >
           Biblioteca
         </Link>
         <Link
@@ -102,20 +119,38 @@ export default function Nav() {
         >
           Salón de la Fama
         </Link>
-        <Link href="/about" className={isActive("about") ? "active" : ""} onClick={() => setOpen(false)}>
+        <Link
+          href="/about"
+          className={isActive("about") ? "active" : ""}
+          onClick={() => setOpen(false)}
+        >
           Acerca de
         </Link>
-        {user ? (
-          <a onClick={handleSignOut} className={isActive("auth") ? "active" : ""}>
+        {loading ? null : user ? (
+          <a
+            onClick={handleSignOut}
+            className={isActive("auth") ? "active" : ""}
+          >
             Cuenta
           </a>
         ) : (
-          <Link href="/auth" className={isActive("auth") ? "active" : ""} onClick={() => setOpen(false)}>
+          <Link
+            href="/auth"
+            className={isActive("auth") ? "active" : ""}
+            onClick={() => setOpen(false)}
+          >
             Iniciar Sesión
           </Link>
         )}
         <div style={{ flex: 1 }}></div>
-        <div className="pixel" style={{ fontSize: 9, color: "var(--ink-faint)", letterSpacing: "0.16em" }}>
+        <div
+          className="pixel"
+          style={{
+            fontSize: 9,
+            color: "var(--ink-faint)",
+            letterSpacing: "0.16em",
+          }}
+        >
           CRÉDITOS · 03
         </div>
       </aside>

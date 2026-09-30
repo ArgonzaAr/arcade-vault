@@ -1,6 +1,6 @@
 # 12 — Registro, login y autenticación con email
 
-**Estado:** Aprobado
+**Estado:** Implementado
 **Depende de:** SPEC 01, SPEC 04, SPEC 06
 **Fecha:** 2026-09-28
 

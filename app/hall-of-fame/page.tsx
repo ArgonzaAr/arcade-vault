@@ -5,23 +5,13 @@ import { useRouter } from "next/navigation";
 import { GAMES, seededScores, type ScoreRow } from "@/app/lib/data";
 import { getTopScores } from "@/app/lib/supabase/queries.client";
 import { gameRegistry } from "@/app/game/registry";
-
-interface StoredUser {
-  name: string;
-}
+import { useAuth } from "@/app/lib/auth/AuthProvider";
 
 export default function HallOfFamePage() {
   const router = useRouter();
   const [tab, setTab] = useState(GAMES[0].id);
-  const [user, setUser] = useState<StoredUser | null>(null);
+  const { user, profile } = useAuth();
   const [realRows, setRealRows] = useState<ScoreRow[]>([]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("av_user");
-      setUser(raw ? JSON.parse(raw) : null);
-    } catch {}
-  }, []);
 
   useEffect(() => {
     if (!gameRegistry[tab]?.hasRealLeaderboard) return;
@@ -133,7 +123,7 @@ export default function HallOfFamePage() {
                 #{String(youRank).padStart(2, "0")}
               </div>
               <div className="pl" style={{ color: "var(--yellow)" }}>
-                {user.name}
+                {profile?.username.toUpperCase() ?? "—"}
               </div>
               <div
                 className="sc"

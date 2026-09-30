@@ -1459,6 +1459,61 @@ a {
   padding: 12px;
   font-size: 9px;
 }
+.social .btn:disabled {
+  flex-direction: column;
+  gap: 6px;
+}
+.auth-card .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+.auth-soon {
+  font-size: 7px;
+  color: var(--ink-faint);
+}
+.auth-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--magenta);
+  color: var(--magenta);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+.auth-link {
+  display: block;
+  margin: 12px auto 0;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.auth-link:hover {
+  color: var(--cyan);
+}
+.auth-notice {
+  text-align: center;
+}
+.auth-notice-title {
+  font-family: var(--pixel);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  margin-bottom: 12px;
+}
+.auth-notice p {
+  margin: 0 0 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
 
 /* ===== salón ===== */
 .av-hall {

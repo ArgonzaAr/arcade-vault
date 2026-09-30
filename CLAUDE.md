@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arcade Vault: plataforma para jugar online y competir por puntos. Next.js 16.3.3 (App Router) + React 19 + TypeScript strict + Tailwind CSS 4 + Supabase. Todo el código fuente vive en `app/` (sin monorepo). Alias `@/*` → `./*`.
 
+Auth (spec `12`): Supabase con email + contraseña y username único en `public.profiles` (creado por trigger). `useAuth()` de `app/lib/auth/AuthProvider.tsx` es la única fuente de sesión en cliente (nunca `getUser()` por página ni `localStorage`); `proxy.ts` en la raíz solo refresca la sesión, no protege rutas.
+
 ## Workflow: Spec Driven Design
 
 Features grandes se definen en `specs/` antes de escribir código.
