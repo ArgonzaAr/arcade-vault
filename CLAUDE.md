@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arcade Vault: plataforma para jugar online y competir por puntos. Next.js 16.3.3 (App Router) + React 19 + TypeScript strict + Tailwind CSS 4 + Supabase. Todo el código fuente vive en `app/` (sin monorepo). Alias `@/*` → `./*`.
 
-Auth (spec `12`): Supabase con email + contraseña y username único en `public.profiles` (creado por trigger). `useAuth()` de `app/lib/auth/AuthProvider.tsx` es la única fuente de sesión en cliente (nunca `getUser()` por página ni `localStorage`); `proxy.ts` en la raíz solo refresca la sesión, no protege rutas.
+Auth (specs `12` y `13`): Supabase con email + contraseña y OAuth (Google, GitHub; `signInWithOAuth` → `/auth/callback`), con username único en `public.profiles` creado por el trigger `handle_new_user()` (en OAuth lo genera: `user_name` de GitHub o parte local del email, 7 caracteres + sufijo 2..999). `useAuth()` de `app/lib/auth/AuthProvider.tsx` es la única fuente de sesión en cliente (nunca `getUser()` por página ni `localStorage`); `proxy.ts` en la raíz refresca la sesión y solo protege las rutas de auth (spec `14`): `/auth/reset` sin sesión → `/auth`, `/auth` con sesión → `/biblioteca`; el resto queda abierto al modo invitado. `scores.user_id` liga cada puntuación a su cuenta: con sesión `insertScore` envía `user_id` y el trigger `scores_before_insert` fija `player_name = upper(username)`; los invitados no pueden usar un username registrado (`player_name_reserved`).
+
+Seguridad (spec `14`, checklist en `references/security/security-checklist.md`): headers HTTP en `next.config.ts` (`securityHeaders`, todas las rutas, sin CSP); Turnstile (`@marsidev/react-turnstile`) en los formularios de `/auth` con `NEXT_PUBLIC_TURNSTILE_SITE_KEY` en `.env.local` y `captchaToken` en `signUp`/`signInWithPassword`/`resetPasswordForEmail` (OAuth y `/auth/reset` sin CAPTCHA); `public.rls_auto_enable()` (event trigger `ensure_rls`) sin `EXECUTE` para `public`/`anon`/`authenticated`.
 
 ## Workflow: Spec Driven Design
 
@@ -29,6 +31,7 @@ Features grandes se definen en `specs/` antes de escribir código.
 - `skin-designer` — skins por juego (`clasico`, `neon`, `retro`) + selector en el HUD del reproductor.
 - `mobile-porter` — soporte táctil (spec 10) para **un** juego.
 - `game-performance` — audita/optimiza FPS (patrón spec 11); niveles `auditar` / `optimizar`.
+- `security-auditor` — audita la seguridad de la BD (RLS, policies, funciones, advisors, migraciones) y de la app (secretos, headers, `proxy.ts`, auth, route handlers) contra las specs `12`–`14`; alcance `todo` / `bd` / `app`. Solo lectura: únicamente escribe en `references/auditor-security/` (estado acumulado + informe fechado por auditoría).
 
 Los subagentes no pueden preguntar: si el usuario no nombra juego(s), preguntar antes con `AskUserQuestion` (`mobile-porter` acepta uno solo). Cada agente lleva su estado en `specs/<agente>/`.
 

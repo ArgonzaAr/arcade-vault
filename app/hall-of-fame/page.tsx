@@ -3,15 +3,41 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GAMES, seededScores, type ScoreRow } from "@/app/lib/data";
-import { getTopScores } from "@/app/lib/supabase/queries.client";
+import {
+  getPlayerBest,
+  getTopScores,
+  type PlayerBest,
+} from "@/app/lib/supabase/queries.client";
 import { gameRegistry } from "@/app/game/registry";
 import { useAuth } from "@/app/lib/auth/AuthProvider";
+
+// Mejor marca cargada junto con el juego y el usuario a los que pertenece,
+// para no mostrar la de otra pestaña o sesión mientras llega la nueva.
+interface LoadedBest {
+  key: string;
+  best: PlayerBest | null;
+}
 
 export default function HallOfFamePage() {
   const router = useRouter();
   const [tab, setTab] = useState(GAMES[0].id);
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const [realRows, setRealRows] = useState<ScoreRow[]>([]);
+  const [loadedBest, setLoadedBest] = useState<LoadedBest | null>(null);
+
+  const userId = profile?.id ?? null;
+  const bestKey = userId ? `${tab}:${userId}` : null;
+
+  useEffect(() => {
+    if (!userId || !gameRegistry[tab]?.hasRealLeaderboard) return;
+    let cancelled = false;
+    getPlayerBest(tab, userId).then((best) => {
+      if (!cancelled) setLoadedBest({ key: `${tab}:${userId}`, best });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, userId]);
 
   useEffect(() => {
     if (!gameRegistry[tab]?.hasRealLeaderboard) return;
@@ -27,8 +53,8 @@ export default function HallOfFamePage() {
   const seeded = useMemo(() => seededScores(tab.length * 23 + 7, 12), [tab]);
   const rows = gameRegistry[tab]?.hasRealLeaderboard ? realRows : seeded;
   const game = GAMES.find((g) => g.id === tab)!;
-  const youRank = user ? Math.floor(8 + (tab.length % 4)) : null;
-  const youScore = user ? rows[5]?.score - 2400 : null;
+  // Solo con sesión y si getPlayerBest devolvió datos para este juego.
+  const you = bestKey && loadedBest?.key === bestKey ? loadedBest.best : null;
 
   return (
     <div className="av-hall fade-in">
@@ -112,7 +138,7 @@ export default function HallOfFamePage() {
             <div className="dt">{r.date}</div>
           </div>
         ))}
-        {user && (
+        {profile && you && (
           <>
             <div className="tr you-label">▸ TU MEJOR MARCA EN {game.title}</div>
             <div
@@ -120,10 +146,10 @@ export default function HallOfFamePage() {
               style={{ animationDelay: `${rows.length * 50 + 50}ms` }}
             >
               <div className="rk" style={{ color: "var(--yellow)" }}>
-                #{String(youRank).padStart(2, "0")}
+                #{String(you.rank).padStart(2, "0")}
               </div>
               <div className="pl" style={{ color: "var(--yellow)" }}>
-                {profile?.username.toUpperCase() ?? "—"}
+                {profile.username.toUpperCase()}
               </div>
               <div
                 className="sc"
@@ -132,9 +158,9 @@ export default function HallOfFamePage() {
                   textShadow: "0 0 6px rgba(245,255,0,0.5)",
                 }}
               >
-                {(youScore || 9999).toLocaleString("es-ES")}
+                {you.score.toLocaleString("es-ES")}
               </div>
-              <div className="dt">11/05/2026</div>
+              <div className="dt">{you.date}</div>
             </div>
           </>
         )}

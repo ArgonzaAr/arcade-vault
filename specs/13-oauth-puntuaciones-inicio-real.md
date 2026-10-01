@@ -1,6 +1,6 @@
 # 13 — Login con Google/GitHub, puntuaciones ligadas a la cuenta e inicio con datos reales
 
-**Estado:** Aprbobado
+**Estado:** Aprobado
 **Depende de:** SPEC 02, SPEC 06, SPEC 12
 **Fecha:** 2026-09-30
 
@@ -279,6 +279,7 @@ _OAuth_
 - **No:** Supabase Realtime para el ticker. Más complejidad y configuración para un beneficio menor.
 - **Sí:** con sesión, saludo en el hero y CTAs de cuenta que llevan a `/biblioteca`. Decisión del usuario. El texto exacto («▶ SEGUIR JUGANDO», «IR A LA BIBLIOTECA →») lo propone esta spec.
 - **Sí:** el criterio de lint se limita a los archivos que toca esta spec. El repo ya tenía errores de lint previos a la SPEC 12 que quedan fuera de alcance.
+- **Sí:** al mover la UI de `app/page.tsx` a `HomeView.tsx` (archivo nuevo) se corrigen sus errores de lint heredados (`{"// 01"}` en los kickers y `&quot;premium&quot;`), sin cambio visible. Decisión del usuario durante la implementación, para cumplir el criterio de lint en archivos creados.
 
 ## Riesgos identificados
 

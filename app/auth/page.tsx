@@ -1,7 +1,8 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile";
 import { useAuth } from "@/app/lib/auth/AuthProvider";
 import { authErrorMessage } from "@/app/lib/auth/errors";
 import { PASSWORD_MIN, USERNAME_RE } from "@/app/lib/auth/validation";
@@ -9,6 +10,7 @@ import { createClient } from "@/app/lib/supabase/client";
 
 type AuthMode = "in" | "up" | "recover";
 type AuthStatus = "idle" | "submitting" | "error" | "check-email";
+type OAuthProvider = "google" | "github";
 
 export default function AuthPage({ searchParams }: PageProps<"/auth">) {
   const { error: errorParam } = use(searchParams);
@@ -28,6 +30,22 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
   const [username, setUsername] = useState("");
   const [pass, setPass] = useState("");
   const [email, setEmail] = useState("");
+  // Proveedor cuyo botón se pulsó; no nulo mientras redirige al proveedor.
+  const [oauthPending, setOauthPending] = useState<OAuthProvider | null>(null);
+  // Token de Turnstile (SPEC 14). Es de un solo uso: se descarta tras cada
+  // envío y al cambiar de modo.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
+
+  // Volver con «atrás» desde Google/GitHub puede restaurar la página desde
+  // la bfcache con los botones aún en «CONECTANDO…».
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setOauthPending(null);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   // Con sesión, /auth no tiene nada que hacer. Mientras se envía el login la
   // navegación la hace submit(), para no redirigir dos veces.
@@ -37,10 +55,16 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
     }
   }, [loading, user, status, router]);
 
+  const resetCaptcha = () => {
+    turnstileRef.current?.reset();
+    setCaptchaToken(null);
+  };
+
   const switchMode = (next: AuthMode) => {
     setMode(next);
     setStatus("idle");
     setErrorMsg("");
+    resetCaptcha();
   };
 
   const fail = (error: Parameters<typeof authErrorMessage>[0]) => {
@@ -53,6 +77,7 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password: pass,
+      options: { captchaToken: captchaToken ?? undefined },
     });
     if (error) return fail(error);
     router.push("/biblioteca");
@@ -80,6 +105,7 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
       options: {
         data: { username: name },
         emailRedirectTo: `${location.origin}/auth/callback?next=/biblioteca`,
+        captchaToken: captchaToken ?? undefined,
       },
     });
     if (error) return fail(error);
@@ -96,9 +122,33 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
     setStatus("submitting");
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${location.origin}/auth/callback?next=/auth/reset`,
+      captchaToken: captchaToken ?? undefined,
     });
     if (error) return fail(error);
     setStatus("check-email");
+  };
+
+  // Igual en INICIAR SESIÓN y CREAR CUENTA: el proveedor redirige a
+  // /auth/callback, que canjea el code y lleva a /biblioteca (o vuelve a
+  // /auth?error=callback si se canceló el consentimiento).
+  const signInWithProvider = async (provider: OAuthProvider) => {
+    if (oauthPending || status === "submitting") return;
+    setOauthPending(provider);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${location.origin}/auth/callback?next=/biblioteca`,
+        },
+      });
+      if (error) {
+        setOauthPending(null);
+        fail(error);
+      }
+    } catch {
+      setOauthPending(null);
+      fail(null);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -110,6 +160,8 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
       else await recover();
     } catch {
       fail(null);
+    } finally {
+      resetCaptcha();
     }
   };
 
@@ -217,10 +269,22 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
               </div>
             )}
 
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+              options={{ theme: "dark" }}
+              // Script bloqueado (p. ej. un bloqueador) o widget que falla.
+              scriptOptions={{ onError: () => fail("captcha_unavailable") }}
+              onSuccess={setCaptchaToken}
+              onExpire={() => setCaptchaToken(null)}
+              onError={() => fail("captcha_unavailable")}
+              style={{ marginTop: 8 }}
+            />
+
             <button
               className="btn lg"
               type="submit"
-              disabled={submitting}
+              disabled={submitting || captchaToken === null}
               style={{ width: "100%", marginTop: 8 }}
             >
               {submitting ? "CONECTANDO…" : submitLabel}
@@ -263,14 +327,21 @@ export default function AuthPage({ searchParams }: PageProps<"/auth">) {
 
         <div className="auth-divider">O CONTINÚA CON</div>
         <div className="social">
-          {/* OAuth llega en la SPEC 13. */}
-          <button className="btn ghost" type="button" disabled>
-            <span>◆ GOOGLE</span>
-            <span className="auth-soon">PRÓXIMAMENTE</span>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={oauthPending !== null}
+            onClick={() => signInWithProvider("google")}
+          >
+            {oauthPending === "google" ? "CONECTANDO…" : "◆ GOOGLE"}
           </button>
-          <button className="btn ghost" type="button" disabled>
-            <span>▣ GITHUB</span>
-            <span className="auth-soon">PRÓXIMAMENTE</span>
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={oauthPending !== null}
+            onClick={() => signInWithProvider("github")}
+          >
+            {oauthPending === "github" ? "CONECTANDO…" : "▣ GITHUB"}
           </button>
         </div>
 

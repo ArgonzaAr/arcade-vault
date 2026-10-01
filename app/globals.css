@@ -1459,19 +1459,11 @@ a {
   padding: 12px;
   font-size: 9px;
 }
-.social .btn:disabled {
-  flex-direction: column;
-  gap: 6px;
-}
 .auth-card .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
-}
-.auth-soon {
-  font-size: 7px;
-  color: var(--ink-faint);
 }
 .auth-error {
   margin-top: 12px;
@@ -2409,6 +2401,16 @@ a {
 .tp-rk {
   position: relative;
   z-index: 1;
+}
+/* Estado vacío del ticker y del top (SPEC 13). */
+.activity-empty {
+  padding: 28px 18px;
+  font-family: var(--pixel);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.8;
+  color: var(--ink-dim);
+  text-align: center;
 }
 
 /* ===== PRICING ===== */

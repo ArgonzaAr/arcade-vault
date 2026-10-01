@@ -40,6 +40,7 @@ export default function GamePlayerPage() {
   // Con sesión el nombre es el username y no se edita; los invitados escriben el suyo.
   const name = profile ? profile.username.toUpperCase() : guestName;
   const [saved, setSaved] = useState(false);
+  const [nameReserved, setNameReserved] = useState(false);
   const [skin, setSkin] = useState<SkinId>(DEFAULT_SKIN);
   const skinKey = "av_skin_" + game.id;
 
@@ -141,12 +142,24 @@ export default function GamePlayerPage() {
     setPaused(false);
     setOver(false);
     setSaved(false);
+    setNameReserved(false);
     if (hasEngine) engineRef.current?.restart();
   };
 
   const saveScore = async () => {
     if (entry?.hasRealLeaderboard) {
-      await insertScore(game.id, name, score);
+      const result = await insertScore(
+        game.id,
+        name,
+        score,
+        profile?.id ?? null
+      );
+      // Nombre reservado: el modal sigue abierto para cambiarlo y reintentar.
+      if (result.reason === "name_reserved") {
+        setNameReserved(true);
+        return;
+      }
+      setNameReserved(false);
       setSaved(true);
       return;
     }
@@ -297,19 +310,27 @@ export default function GamePlayerPage() {
             <div className="final-label">PUNTUACIÓN FINAL</div>
             <div className="final">{score.toLocaleString("es-ES")}</div>
             {!saved ? (
-              <div className="input-row">
-                <input
-                  value={name}
-                  readOnly={Boolean(profile)}
-                  onChange={(e) =>
-                    setGuestName(e.target.value.toUpperCase().slice(0, 10))
-                  }
-                  placeholder="TUS INICIALES"
-                />
-                <button className="btn yellow" onClick={saveScore}>
-                  GUARDAR PUNTUACIÓN
-                </button>
-              </div>
+              <>
+                <div className="input-row">
+                  <input
+                    value={name}
+                    readOnly={Boolean(profile)}
+                    onChange={(e) => {
+                      setGuestName(e.target.value.toUpperCase().slice(0, 10));
+                      setNameReserved(false);
+                    }}
+                    placeholder="TUS INICIALES"
+                  />
+                  <button className="btn yellow" onClick={saveScore}>
+                    GUARDAR PUNTUACIÓN
+                  </button>
+                </div>
+                {nameReserved && (
+                  <div className="auth-error" role="alert">
+                    ESE NOMBRE ES DE UN JUGADOR REGISTRADO
+                  </div>
+                )}
+              </>
             ) : (
               <div className="toast-saved">▸ PUNTUACIÓN GUARDADA_</div>
             )}

@@ -1,8 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Refresca la sesión de Supabase en cada request (SPEC 12). No protege ni
-// redirige ninguna ruta: el modo invitado sigue abierto en todas las pantallas.
+// Refresca la sesión de Supabase en cada request (SPEC 12) y protege solo las
+// rutas de auth (SPEC 14): /auth/reset exige sesión y /auth no tiene sentido
+// con ella. El modo invitado sigue abierto en el resto de pantallas.
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -32,7 +33,24 @@ export async function proxy(request: NextRequest) {
 
   // No meter lógica entre createServerClient y getUser(): getUser() es lo
   // que dispara el refresco del token y la escritura de cookies.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { pathname } = request.nextUrl;
+  const target =
+    !user && pathname === "/auth/reset"
+      ? "/auth"
+      : user && pathname === "/auth"
+        ? "/biblioteca"
+        : null;
+
+  if (target) {
+    // La redirección lleva las cookies que getUser() acaba de refrescar.
+    const redirect = NextResponse.redirect(new URL(target, request.url));
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  }
 
   return response;
 }

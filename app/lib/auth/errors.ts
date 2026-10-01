@@ -7,7 +7,8 @@ export type AuthLocalCode =
   | "username_taken"
   | "username_invalid"
   | "callback"
-  | "password_mismatch";
+  | "password_mismatch"
+  | "captcha_unavailable";
 
 type AuthErrorLike = { code?: string; message?: string };
 
@@ -21,6 +22,9 @@ const MESSAGES: Record<string, string> = {
   username_invalid: "USUARIO: 3–10 CARACTERES, LETRAS, NÚMEROS O _",
   callback: "EL ENLACE ES INVÁLIDO O CADUCÓ",
   password_mismatch: "LAS CONTRASEÑAS NO COINCIDEN",
+  // Turnstile (SPEC 14): Supabase rechaza el token / el widget no carga.
+  captcha_failed: "VERIFICACIÓN ANTI-BOT FALLIDA · INTÉNTALO DE NUEVO",
+  captcha_unavailable: "NO SE PUDO CARGAR LA VERIFICACIÓN · RECARGA LA PÁGINA",
 };
 
 const FALLBACK = "ALGO FALLÓ. INTÉNTALO DE NUEVO";
